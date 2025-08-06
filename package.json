@@ -8,7 +8,7 @@
     "lint": "next lint",
     "start": "next start",
     "db:push": "prisma db push",
-    "db:generate": "prisma generate", 
+    "db:generate": "prisma generate",
     "db:seed": "tsx scripts/seed.ts",
     "db:reset": "prisma db push --force-reset && npm run db:generate && npm run db:seed",
     "db:studio": "prisma studio"
@@ -44,6 +44,7 @@
     "@radix-ui/react-toggle": "1.1.1",
     "@radix-ui/react-toggle-group": "1.1.1",
     "@radix-ui/react-tooltip": "1.1.6",
+    "@vercel/blob": "^1.1.1",
     "autoprefixer": "^10.4.20",
     "bcryptjs": "latest",
     "class-variance-authority": "^0.7.1",
