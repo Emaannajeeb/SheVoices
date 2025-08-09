@@ -6,135 +6,128 @@ import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { redirect, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Switch } from "@/components/ui/switch"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Progress } from "@/components/ui/progress"
-import { ArrowLeft, Video, ImageIcon, Save, Play, X } from "lucide-react"
+import { Upload, Video, ArrowLeft, CheckCircle, AlertCircle } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+import Link from "next/link"
 
-export default function UploadPodcastPage() {
+export default function PodcastUploadPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const [loading, setLoading] = useState(false)
-  const [videoUploading, setVideoUploading] = useState(false)
-  const [thumbnailUploading, setThumbnailUploading] = useState(false)
+  const { toast } = useToast()
+  const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
-
+  const [uploadedVideo, setUploadedVideo] = useState<any>(null)
   const [formData, setFormData] = useState({
     title: "",
     description: "",
-    videoUrl: "",
-    thumbnailUrl: "",
-    duration: 0,
-    isActive: true,
+    tags: "",
   })
 
   if (status === "unauthenticated") {
     redirect("/admin/login")
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-
-    try {
-      const response = await fetch("/api/podcast", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
-      })
-
-      if (response.ok) {
-        router.push("/admin/podcast")
-      } else {
-        console.error("Failed to upload video")
-      }
-    } catch (error) {
-      console.error("Error uploading video:", error)
-    } finally {
-      setLoading(false)
-    }
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }))
   }
 
-  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
     // Validate file type
     if (!file.type.startsWith("video/")) {
-      alert("Please select a video file")
+      toast({
+        title: "Invalid File Type",
+        description: "Please select a video file",
+        variant: "destructive",
+      })
       return
     }
 
-    // Validate file size (50MB limit for videos)
-    const maxSize = 50 * 1024 * 1024 // 50MB
+    // Validate file size (100MB limit)
+    const maxSize = 100 * 1024 * 1024 // 100MB
     if (file.size > maxSize) {
-      alert("Video file is too large. Maximum size is 50MB")
+      toast({
+        title: "File Too Large",
+        description: "Please select a video file smaller than 100MB",
+        variant: "destructive",
+      })
       return
     }
 
-    setVideoUploading(true)
+    setUploading(true)
     setUploadProgress(0)
 
-    const formData = new FormData()
-    formData.append("file", file)
-    formData.append("category", "podcast")
-
     try {
+      const uploadFormData = new FormData()
+      uploadFormData.append("file", file)
+      uploadFormData.append("type", "video")
+      uploadFormData.append("title", formData.title || file.name)
+      uploadFormData.append("description", formData.description)
+      uploadFormData.append("category", "podcast")
+      uploadFormData.append("tags", formData.tags)
+
+      // Simulate progress
+      const progressInterval = setInterval(() => {
+        setUploadProgress((prev) => {
+          if (prev >= 90) {
+            clearInterval(progressInterval)
+            return prev
+          }
+          return prev + Math.random() * 10
+        })
+      }, 500)
+
       const response = await fetch("/api/upload", {
         method: "POST",
-        body: formData,
+        body: uploadFormData,
       })
 
+      clearInterval(progressInterval)
+      setUploadProgress(100)
+
       if (response.ok) {
-        const data = await response.json()
-        setFormData((prev) => ({
-          ...prev,
-          videoUrl: data.url,
-          // Try to extract duration from video metadata if available
-          duration: 0, // You might want to implement video duration extraction
-        }))
-        setUploadProgress(100)
+        const result = await response.json()
+        setUploadedVideo(result)
+
+        toast({
+          title: "Upload Successful",
+          description: "Your podcast video has been uploaded to Cloudinary",
+        })
+
+        // Reset form
+        setFormData({
+          title: "",
+          description: "",
+          tags: "",
+        })
+
+        // Reset file input
+        e.target.value = ""
+      } else {
+        const error = await response.json()
+        throw new Error(error.message || "Upload failed")
       }
     } catch (error) {
-      console.error("Error uploading video:", error)
-    } finally {
-      setVideoUploading(false)
-    }
-  }
-
-  const handleThumbnailUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    if (!file.type.startsWith("image/")) {
-      alert("Please select an image file")
-      return
-    }
-
-    setThumbnailUploading(true)
-    const formData = new FormData()
-    formData.append("file", file)
-    formData.append("category", "podcast")
-
-    try {
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
+      console.error("Upload error:", error)
+      toast({
+        title: "Upload Failed",
+        description: (error as any).message || "Failed to upload video",
+        variant: "destructive",
       })
-
-      if (response.ok) {
-        const data = await response.json()
-        setFormData((prev) => ({ ...prev, thumbnailUrl: data.url }))
-      }
-    } catch (error) {
-      console.error("Error uploading thumbnail:", error)
     } finally {
-      setThumbnailUploading(false)
+      setUploading(false)
+      setTimeout(() => setUploadProgress(0), 2000)
     }
   }
 
@@ -155,239 +148,227 @@ export default function UploadPodcastPage() {
       <div className="container mx-auto max-w-4xl px-4 py-8">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
-          <Button variant="ghost" onClick={() => router.back()} className="rounded-xl">
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
-          </Button>
+          <Link href="/admin/podcast">
+            <Button variant="outline" size="sm" className="rounded-xl bg-transparent">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Podcast
+            </Button>
+          </Link>
           <div>
             <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 via-pink-500 to-orange-400 bg-clip-text text-transparent">
               Upload Podcast Video
             </h1>
-            <p className="text-gray-600">Share your podcast content with the community</p>
+            <p className="text-gray-600">Upload your podcast video to Cloudinary</p>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-8">
-          <div className="grid lg:grid-cols-3 gap-8">
-            {/* Main Content */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Video Upload */}
-              <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg rounded-2xl">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Video className="w-5 h-5" />
-                    Video File
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {formData.videoUrl ? (
-                    <div className="space-y-4">
-                      <div className="aspect-video bg-black rounded-xl overflow-hidden">
-                        <video
-                          src={formData.videoUrl}
-                          controls
-                          className="w-full h-full"
-                          poster={formData.thumbnailUrl}
-                        >
-                          Your browser does not support the video tag.
-                        </video>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setFormData((prev) => ({ ...prev, videoUrl: "" }))}
-                        className="w-full rounded-xl"
-                      >
-                        <X className="w-4 h-4 mr-2" />
-                        Remove Video
-                      </Button>
-                    </div>
-                  ) : (
-                    <div>
-                      <input
-                        type="file"
-                        accept="video/*"
-                        onChange={handleVideoUpload}
-                        className="hidden"
-                        id="video-upload"
-                      />
-                      <Label
-                        htmlFor="video-upload"
-                        className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-purple-300 rounded-xl cursor-pointer hover:bg-purple-50 transition-colors"
-                      >
-                        <Video className="w-12 h-12 text-purple-400 mb-4" />
-                        <span className="text-lg font-medium text-purple-600 mb-2">
-                          {videoUploading ? "Uploading..." : "Upload Video File"}
-                        </span>
-                        <span className="text-sm text-gray-500">MP4, WebM up to 50MB</span>
-                      </Label>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Upload Form */}
+          <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg rounded-2xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Video className="w-5 h-5" />
+                Video Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="title">Title *</Label>
+                <Input
+                  id="title"
+                  name="title"
+                  value={formData.title}
+                  onChange={handleInputChange}
+                  placeholder="Enter video title"
+                  className="rounded-xl"
+                  required
+                />
+              </div>
 
-                      {videoUploading && (
-                        <div className="mt-4">
-                          <Progress value={uploadProgress} className="w-full" />
-                          <p className="text-sm text-gray-500 mt-2 text-center">Uploading... {uploadProgress}%</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  name="description"
+                  value={formData.description}
+                  onChange={handleInputChange}
+                  placeholder="Enter video description"
+                  className="rounded-xl min-h-[100px]"
+                />
+              </div>
 
-              {/* Video Details */}
-              <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg rounded-2xl">
-                <CardHeader>
-                  <CardTitle>Video Details</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <Label htmlFor="title">Title *</Label>
-                    <Input
-                      id="title"
-                      placeholder="Enter video title..."
-                      value={formData.title}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))}
-                      className="rounded-xl border-purple-200 focus:border-purple-400"
-                      required
-                    />
-                  </div>
+              <div className="space-y-2">
+                <Label htmlFor="tags">Tags</Label>
+                <Input
+                  id="tags"
+                  name="tags"
+                  value={formData.tags}
+                  onChange={handleInputChange}
+                  placeholder="Enter tags separated by commas"
+                  className="rounded-xl"
+                />
+                <p className="text-sm text-gray-500">Separate multiple tags with commas</p>
+              </div>
 
-                  <div>
-                    <Label htmlFor="description">Description</Label>
-                    <Textarea
-                      id="description"
-                      placeholder="Describe your podcast video..."
-                      value={formData.description}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
-                      className="h-24 rounded-xl border-purple-200 focus:border-purple-400 resize-none"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="duration">Duration (seconds)</Label>
-                    <Input
-                      id="duration"
-                      type="number"
-                      placeholder="Video duration in seconds"
-                      value={formData.duration || ""}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          duration: Number.parseInt(e.target.value) || 0,
-                        }))
-                      }
-                      className="rounded-xl border-purple-200 focus:border-purple-400"
-                    />
-                    <p className="text-sm text-gray-500 mt-1">
-                      Optional: Enter the video duration for better user experience
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Sidebar */}
-            <div className="space-y-6">
-              {/* Thumbnail */}
-              <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg rounded-2xl">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <ImageIcon className="w-5 h-5" />
-                    Thumbnail
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {formData.thumbnailUrl ? (
-                    <div className="space-y-4">
-                      <img
-                        src={formData.thumbnailUrl || "/placeholder.svg"}
-                        alt="Thumbnail"
-                        className="w-full aspect-video object-cover rounded-xl"
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setFormData((prev) => ({ ...prev, thumbnailUrl: "" }))}
-                        className="w-full rounded-xl"
-                      >
-                        <X className="w-4 h-4 mr-2" />
-                        Remove Thumbnail
-                      </Button>
-                    </div>
-                  ) : (
-                    <div>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleThumbnailUpload}
-                        className="hidden"
-                        id="thumbnail-upload"
-                      />
-                      <Label
-                        htmlFor="thumbnail-upload"
-                        className="flex flex-col items-center justify-center w-full aspect-video border-2 border-dashed border-purple-300 rounded-xl cursor-pointer hover:bg-purple-50 transition-colors"
-                      >
-                        <ImageIcon className="w-8 h-8 text-purple-400 mb-2" />
-                        <span className="text-sm text-purple-600">
-                          {thumbnailUploading ? "Uploading..." : "Upload Thumbnail"}
-                        </span>
-                      </Label>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Settings */}
-              <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg rounded-2xl">
-                <CardHeader>
-                  <CardTitle>Settings</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="isActive" className="text-sm font-medium">
-                      Make video active
-                    </Label>
-                    <Switch
-                      id="isActive"
-                      checked={formData.isActive}
-                      onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, isActive: checked }))}
-                    />
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">
-                    {formData.isActive
-                      ? "This video will be visible on the podcast page"
-                      : "This video will be hidden from the public"}
-                  </p>
-                </CardContent>
-              </Card>
-
-              {/* Actions */}
-              <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg rounded-2xl">
-                <CardContent className="pt-6 space-y-3">
-                  <Button
-                    type="submit"
-                    disabled={loading || !formData.videoUrl || !formData.title}
-                    className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl"
+              {/* File Upload */}
+              <div className="space-y-2">
+                <Label htmlFor="video">Video File *</Label>
+                <div className="border-2 border-dashed border-purple-200 rounded-xl p-8 text-center hover:border-purple-300 transition-colors">
+                  <input
+                    id="video"
+                    type="file"
+                    accept="video/*"
+                    onChange={handleFileUpload}
+                    disabled={uploading}
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="video"
+                    className={`cursor-pointer flex flex-col items-center gap-4 ${
+                      uploading ? "pointer-events-none opacity-50" : ""
+                    }`}
                   >
-                    <Save className="w-4 h-4 mr-2" />
-                    {loading ? "Uploading..." : "Upload Video"}
-                  </Button>
+                    <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center">
+                      <Upload className="w-8 h-8 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="text-lg font-medium text-gray-700">
+                        {uploading ? "Uploading..." : "Click to upload video"}
+                      </p>
+                      <p className="text-sm text-gray-500">MP4, MOV, AVI up to 100MB</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
 
-                  {formData.videoUrl && (
+              {/* Upload Progress */}
+              {uploading && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Uploading to Cloudinary...</span>
+                    <span>{Math.round(uploadProgress)}%</span>
+                  </div>
+                  <Progress value={uploadProgress} className="h-2" />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Upload Status */}
+          <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg rounded-2xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Upload className="w-5 h-5" />
+                Upload Status
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!uploadedVideo && !uploading && (
+                <div className="text-center py-12">
+                  <Video className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500">No video uploaded yet</p>
+                  <p className="text-sm text-gray-400 mt-2">
+                    Fill in the details and select a video file to get started
+                  </p>
+                </div>
+              )}
+
+              {uploading && (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Upload className="w-8 h-8 text-purple-600 animate-pulse" />
+                  </div>
+                  <p className="text-gray-700 font-medium">Uploading to Cloudinary...</p>
+                  <p className="text-sm text-gray-500 mt-2">Please wait while we process your video</p>
+                </div>
+              )}
+
+              {uploadedVideo && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 p-4 bg-green-50 rounded-xl">
+                    <CheckCircle className="w-6 h-6 text-green-600" />
+                    <div>
+                      <p className="font-medium text-green-800">Upload Successful!</p>
+                      <p className="text-sm text-green-600">Video uploaded to Cloudinary</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Public ID:</span>
+                      <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">{uploadedVideo.publicId}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Format:</span>
+                      <span className="uppercase">{uploadedVideo.format}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Size:</span>
+                      <span>{(uploadedVideo.bytes / (1024 * 1024)).toFixed(2)} MB</span>
+                    </div>
+                    {uploadedVideo.duration && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Duration:</span>
+                        <span>
+                          {Math.floor(uploadedVideo.duration / 60)}:
+                          {(uploadedVideo.duration % 60).toString().padStart(2, "0")}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2 pt-4">
                     <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => window.open("/podcast", "_blank")}
-                      className="w-full border-purple-300 text-purple-600 hover:bg-purple-50 rounded-xl"
+                      onClick={() => router.push("/admin/podcast")}
+                      className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl"
                     >
-                      <Play className="w-4 h-4 mr-2" />
-                      Preview Page
+                      View All Videos
                     </Button>
-                  )}
-                </CardContent>
-              </Card>
+                    <Button
+                      onClick={() => window.open("/podcast", "_blank")}
+                      variant="outline"
+                      className="flex-1 rounded-xl"
+                    >
+                      View on Site
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Instructions */}
+        <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg rounded-2xl mt-8">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5" />
+              Upload Guidelines
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h4 className="font-medium text-gray-800 mb-2">Supported Formats</h4>
+                <ul className="text-sm text-gray-600 space-y-1">
+                  <li>• MP4 (recommended)</li>
+                  <li>• MOV</li>
+                  <li>• AVI</li>
+                  <li>• WebM</li>
+                </ul>
+              </div>
+              <div>
+                <h4 className="font-medium text-gray-800 mb-2">Requirements</h4>
+                <ul className="text-sm text-gray-600 space-y-1">
+                  <li>• Maximum file size: 100MB</li>
+                  <li>• Recommended resolution: 1080p</li>
+                  <li>• Title is required</li>
+                  <li>• Videos are automatically optimized</li>
+                </ul>
+              </div>
             </div>
-          </div>
-        </form>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

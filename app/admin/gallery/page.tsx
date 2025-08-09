@@ -20,20 +20,29 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, ImageIcon, Calendar, Filter } from "lucide-react"
+import { Plus, Search, MoreHorizontal, Trash2, Eye, ImageIcon, Filter, FileImage } from "lucide-react"
 
 interface GalleryImage {
   id: string
   title: string
+  description?: string
   imageUrl: string
+  thumbnailUrl: string
   altText?: string
   category: string
   isActive: boolean
+  published: boolean
   createdAt: string
   updatedAt: string
+  publicId: string
+  format: string
+  bytes: number
+  width?: number
+  height?: number
+  tags: string[]
 }
 
-const categories = ["general", "podcast", "events", "community", "behind-scenes"]
+const categories = ["general", "podcast", "events", "community", "workshops", "testimonials"]
 
 export default function AdminGalleryPage() {
   const { data: session, status } = useSession()
@@ -60,7 +69,9 @@ export default function AdminGalleryPage() {
       const response = await fetch(url)
       if (response.ok) {
         const data = await response.json()
-        setImages(data)
+        setImages(data.images || [])
+      } else {
+        console.error("Failed to fetch images:", response.statusText)
       }
     } catch (error) {
       console.error("Error fetching images:", error)
@@ -71,7 +82,7 @@ export default function AdminGalleryPage() {
 
   const handleDelete = async (image: GalleryImage) => {
     try {
-      const response = await fetch(`/api/gallery/${image.id}`, {
+      const response = await fetch(`/api/upload?publicId=${image.publicId}`, {
         method: "DELETE",
       })
 
@@ -86,24 +97,45 @@ export default function AdminGalleryPage() {
 
   const toggleActive = async (image: GalleryImage) => {
     try {
-      const response = await fetch(`/api/gallery/${image.id}`, {
-        method: "PUT",
+      const response = await fetch("/api/gallery", {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          ...image,
+          publicId: image.publicId,
+          title: image.title,
+          description: image.description,
+          category: image.category,
           isActive: !image.isActive,
+          published: image.published,
+          tags: image.tags,
         }),
       })
 
       if (response.ok) {
-        const updatedImage = await response.json()
-        setImages(images.map((img) => (img.id === image.id ? updatedImage : img)))
+        setImages(
+          images.map((img) =>
+            img.id === image.id
+              ? {
+                  ...img,
+                  isActive: !img.isActive,
+                }
+              : img,
+          ),
+        )
       }
     } catch (error) {
       console.error("Error updating image:", error)
     }
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return "0 Bytes"
+    const k = 1024
+    const sizes = ["Bytes", "KB", "MB", "GB"]
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
   }
 
   const filteredImages = images.filter(
@@ -117,7 +149,7 @@ export default function AdminGalleryPage() {
       <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 pt-20">
         <div className="container mx-auto max-w-7xl px-4 py-8">
           <div className="flex items-center justify-center h-64">
-            <div className="text-lg text-gray-600">Loading...</div>
+            <div className="text-lg text-gray-600">Loading Cloudinary images...</div>
           </div>
         </div>
       </div>
@@ -133,7 +165,7 @@ export default function AdminGalleryPage() {
             <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 via-pink-500 to-orange-400 bg-clip-text text-transparent mb-2">
               Gallery Management
             </h1>
-            <p className="text-gray-600">Upload and manage your photo gallery</p>
+            <p className="text-gray-600">Upload and manage your photo gallery from Cloudinary</p>
           </div>
           <Link href="/admin/gallery/upload">
             <Button className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl mt-4 md:mt-0">
@@ -185,18 +217,12 @@ export default function AdminGalleryPage() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">This Month</p>
+                  <p className="text-sm font-medium text-gray-600">Total Size</p>
                   <p className="text-2xl font-bold text-orange-600">
-                    {
-                      images.filter((img) => {
-                        const imageDate = new Date(img.createdAt)
-                        const now = new Date()
-                        return imageDate.getMonth() === now.getMonth() && imageDate.getFullYear() === now.getFullYear()
-                      }).length
-                    }
+                    {formatFileSize(images.reduce((acc, img) => acc + img.bytes, 0))}
                   </p>
                 </div>
-                <Calendar className="w-8 h-8 text-orange-500" />
+                <FileImage className="w-8 h-8 text-orange-500" />
               </div>
             </CardContent>
           </Card>
@@ -250,9 +276,10 @@ export default function AdminGalleryPage() {
                   >
                     <div className="aspect-square overflow-hidden">
                       <img
-                        src={image.imageUrl || "/placeholder.svg"}
+                        src={image.thumbnailUrl || image.imageUrl}
                         alt={image.altText || image.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
                       />
                     </div>
 
@@ -274,12 +301,6 @@ export default function AdminGalleryPage() {
                               <Eye className="w-4 h-4 mr-2" />
                               View Full Size
                             </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                              <Link href={`/admin/gallery/edit/${image.id}`}>
-                                <Edit className="w-4 h-4 mr-2" />
-                                Edit
-                              </Link>
-                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => toggleActive(image)}>
                               <Eye className="w-4 h-4 mr-2" />
                               {image.isActive ? "Deactivate" : "Activate"}
@@ -292,7 +313,7 @@ export default function AdminGalleryPage() {
                         </DropdownMenu>
                       </div>
 
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between mb-2">
                         <Badge variant="outline" className="text-xs">
                           {image.category.replace("-", " ")}
                         </Badge>
@@ -304,7 +325,26 @@ export default function AdminGalleryPage() {
                         </Badge>
                       </div>
 
-                      <p className="text-xs text-gray-500 mt-2">{new Date(image.createdAt).toLocaleDateString()}</p>
+                      <div className="text-xs text-gray-500 space-y-1">
+                        <div>{formatFileSize(image.bytes)}</div>
+                        <div>
+                          {image.width}x{image.height} • {image.format.toUpperCase()}
+                        </div>
+                        <div>{new Date(image.createdAt).toLocaleDateString()}</div>
+                      </div>
+
+                      {image.tags && image.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {image.tags.slice(0, 2).map((tag) => (
+                            <span key={tag} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
+                              {tag}
+                            </span>
+                          ))}
+                          {image.tags.length > 2 && (
+                            <span className="text-xs text-gray-500">+{image.tags.length - 2}</span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -316,7 +356,7 @@ export default function AdminGalleryPage() {
                 <p className="text-gray-500 mb-4">
                   {searchTerm || selectedCategory !== "all"
                     ? "Try adjusting your search or filter"
-                    : "Get started by uploading your first images"}
+                    : "Get started by uploading your first images to Cloudinary"}
                 </p>
                 <Link href="/admin/gallery/upload">
                   <Button className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl">
@@ -335,7 +375,8 @@ export default function AdminGalleryPage() {
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Image</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to delete "{deleteImage?.title}"? This action cannot be undone.
+                Are you sure you want to delete "{deleteImage?.title}"? This will permanently remove the image from
+                Cloudinary and cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

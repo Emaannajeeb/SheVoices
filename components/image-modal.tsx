@@ -11,17 +11,31 @@ import { format } from "date-fns"
 interface GalleryImage {
   id: string
   title: string
+  description?: string
   imageUrl: string
-  altText: string | null
+  thumbnailUrl?: string  // Make optional if not always available
+  altText: string
   category: string
+  isActive?: boolean     // Make optional
+  published?: boolean    // Make optional
   createdAt: string
+  publicId?: string      // Make optional
+  format: string
+  bytes?: number         // Make optional
+  width?: number
+  height?: number
+  tags: string[]
+  size: number           // Keep this if you prefer 'size' over 'bytes'
 }
+
 
 interface ImageModalProps {
   image: GalleryImage
-  isOpen: boolean
-  onClose: () => void
+  trigger: React.ReactNode  // Add this line
+  isOpen?: boolean          // Make optional if controlled by trigger
+  onClose?: () => void      // Make optional if controlled by trigger
 }
+
 
 export function ImageModal({ image, isOpen, onClose }: ImageModalProps) {
   const [zoom, setZoom] = useState(1)

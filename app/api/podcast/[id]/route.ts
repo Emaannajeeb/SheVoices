@@ -1,32 +1,46 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { deleteFromCloudinary, updateCloudinaryMetadata, getVideoThumbnail } from "@/lib/cloudinary"
+import cloudinary from "@/lib/cloudinary"
 
-interface RouteParams {
-  params: Promise<{ id: string }>
-}
-
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { id } = await params
+    const { id } = params
 
-    const video = await prisma.podcastVideo.findUnique({
-      where: { id },
+    // Get video details from Cloudinary
+    const result = await cloudinary.api.resource(id, {
+      resource_type: "video",
+      context: true,
     })
 
-    if (!video) {
-      return NextResponse.json({ error: "Podcast video not found" }, { status: 404 })
+    const video = {
+      id: result.public_id,
+      title: result.context?.custom?.title || result.filename || "Untitled Video",
+      description: result.context?.custom?.description || "",
+      videoUrl: result.secure_url,
+      thumbnailUrl: getVideoThumbnail(result.public_id, { width: 640, height: 360 }),
+      duration: result.duration || 0,
+      isActive: result.context?.custom?.isActive !== "false",
+      createdAt: result.created_at,
+      updatedAt: result.created_at,
+      publicId: result.public_id,
+      format: result.format,
+      bytes: result.bytes,
+      width: result.width,
+      height: result.height,
+      category: result.context?.custom?.category || "podcast",
+      tags: result.context?.custom?.tags ? result.context.custom.tags.split(",") : [],
     }
 
     return NextResponse.json(video)
   } catch (error) {
-    console.error("Error fetching podcast video:", error)
-    return NextResponse.json({ error: "Failed to fetch podcast video" }, { status: 500 })
+    console.error("Error fetching video:", error)
+    return NextResponse.json({ error: "Video not found" }, { status: 404 })
   }
 }
 
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions)
 
@@ -34,35 +48,52 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
+    const { id } = params
     const body = await request.json()
-    const { title, description, videoUrl, thumbnailUrl, duration, isActive } = body
+    const { title, description, isActive, tags } = body
 
-    const video = await prisma.podcastVideo.findUnique({ where: { id } })
-    if (!video) {
-      return NextResponse.json({ error: "Podcast video not found" }, { status: 404 })
-    }
-
-    const updatedVideo = await prisma.podcastVideo.update({
-      where: { id },
-      data: {
-        title,
-        description,
-        videoUrl,
-        thumbnailUrl,
-        duration,
-        isActive,
-      },
+    // Update video metadata in Cloudinary
+    await updateCloudinaryMetadata(id, {
+      title: title || "",
+      description: description || "",
+      isActive: isActive.toString(),
+      tags: Array.isArray(tags) ? tags.join(",") : tags || "",
+      category: "podcast",
     })
+
+    // Get updated video details
+    const result = await cloudinary.api.resource(id, {
+      resource_type: "video",
+      context: true,
+    })
+
+    const updatedVideo = {
+      id: result.public_id,
+      title: result.context?.custom?.title || result.filename || "Untitled Video",
+      description: result.context?.custom?.description || "",
+      videoUrl: result.secure_url,
+      thumbnailUrl: getVideoThumbnail(result.public_id, { width: 640, height: 360 }),
+      duration: result.duration || 0,
+      isActive: result.context?.custom?.isActive !== "false",
+      createdAt: result.created_at,
+      updatedAt: result.created_at,
+      publicId: result.public_id,
+      format: result.format,
+      bytes: result.bytes,
+      width: result.width,
+      height: result.height,
+      category: result.context?.custom?.category || "podcast",
+      tags: result.context?.custom?.tags ? result.context.custom.tags.split(",") : [],
+    }
 
     return NextResponse.json(updatedVideo)
   } catch (error) {
-    console.error("Error updating podcast video:", error)
-    return NextResponse.json({ error: "Failed to update podcast video" }, { status: 500 })
+    console.error("Error updating video:", error)
+    return NextResponse.json({ error: "Failed to update video" }, { status: 500 })
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions)
 
@@ -70,18 +101,14 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
+    const { id } = params
 
-    const video = await prisma.podcastVideo.findUnique({ where: { id } })
-    if (!video) {
-      return NextResponse.json({ error: "Podcast video not found" }, { status: 404 })
-    }
+    // Delete video from Cloudinary
+    await deleteFromCloudinary(id, "video")
 
-    await prisma.podcastVideo.delete({ where: { id } })
-
-    return NextResponse.json({ message: "Podcast video deleted successfully" })
+    return NextResponse.json({ message: "Video deleted successfully" })
   } catch (error) {
-    console.error("Error deleting podcast video:", error)
-    return NextResponse.json({ error: "Failed to delete podcast video" }, { status: 500 })
+    console.error("Error deleting video:", error)
+    return NextResponse.json({ error: "Failed to delete video" }, { status: 500 })
   }
 }
