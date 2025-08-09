@@ -1,8 +1,17 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { uploadToCloudinary, deleteFromCloudinary } from "@/lib/cloudinary"
+import { v2 as cloudinary } from 'cloudinary'
+
 export const dynamic = "force-dynamic"
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+})
+
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
@@ -31,7 +40,7 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
 
-    // Determine folder and resource type based on type
+    // Determine folder and resource type
     let folder = "shevoices"
     let resourceType: "image" | "video" | "auto" = "auto"
 
@@ -46,23 +55,40 @@ export async function POST(request: NextRequest) {
       resourceType = "image"
     }
 
-    // Prepare context metadata
-    const context = {
-      title: title || file.name,
-      description: description || "",
-      category: category || type,
-      isActive: "true",
-      tags: tags || "",
-    }
+    // Create context string in correct format (pipe-separated)
+    const contextParts = []
+    if (title) contextParts.push(`title=${title}`)
+    if (description) contextParts.push(`description=${description}`)
+    if (category) contextParts.push(`category=${category}`)
+    contextParts.push(`isActive=true`)
+    if (tags) contextParts.push(`tags=${tags}`)
+    
+    const contextString = contextParts.join('|')
 
-    console.log("Uploading to Cloudinary:", { folder, resourceType, context })
+    console.log("Uploading to Cloudinary:", { folder, resourceType, context: contextString })
 
-    // Upload to Cloudinary
-    const result = await uploadToCloudinary(buffer, {
+    // Upload to Cloudinary using Promise wrapper
+    const result = await new Promise<any>((resolve, reject) => {
+  cloudinary.uploader.upload_stream(
+    {
       folder,
       resource_type: resourceType,
-      context,
-    })
+      context: contextString,
+      quality: 'auto',
+      format: 'auto',
+      use_filename: true,
+      unique_filename: true,
+    },
+    (error, result) => {
+      if (error) {
+        console.error('Cloudinary upload error:', error)
+        reject(error)
+      } else {
+        resolve(result)
+      }
+    }
+  ).end(buffer)
+})
 
     console.log("Upload successful:", result)
 
@@ -79,34 +105,9 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("Upload error:", error)
-    return NextResponse.json({ error: "Upload failed", details: (error as any).message }, { status: 500 })
-  }
-}
-
-export async function DELETE(request: NextRequest) {
-  try {
-    const session = await getServerSession(authOptions)
-
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const { searchParams } = new URL(request.url)
-    const publicId = searchParams.get("publicId")
-    const resourceType = searchParams.get("resourceType") || "image"
-
-    if (!publicId) {
-      return NextResponse.json({ error: "Public ID is required" }, { status: 400 })
-    }
-
-    console.log("Deleting from Cloudinary:", { publicId, resourceType })
-
-    // Delete from Cloudinary
-    await deleteFromCloudinary(publicId, resourceType as "image" | "video")
-
-    return NextResponse.json({ message: "File deleted successfully" })
-  } catch (error) {
-    console.error("Delete error:", error)
-    return NextResponse.json({ error: "Delete failed", details: (error as any).message }, { status: 500 })
+    return NextResponse.json({ 
+      error: "Upload failed", 
+      details: error instanceof Error ? error.message : "Unknown error"
+    }, { status: 500 })
   }
 }
