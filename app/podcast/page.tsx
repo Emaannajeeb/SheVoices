@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Play, Clock, Calendar, Video, FileVideo } from "lucide-react"
-
+export const dynamic = 'force-dynamic'
 interface PodcastVideo {
   id: string
   title: string
