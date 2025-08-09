@@ -3,27 +3,27 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
+export const dynamic = "force-dynamic"
+
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
 
-    if (!session) {
+    if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const { searchParams } = new URL(request.url)
     const page = Number.parseInt(searchParams.get("page") || "1")
     const limit = Number.parseInt(searchParams.get("limit") || "10")
-    const status = searchParams.get("status")
-    const search = searchParams.get("search")
+    const search = searchParams.get("search") || ""
+    const status = searchParams.get("status") || ""
 
     const skip = (page - 1) * limit
 
     // Build where clause
     const where: any = {}
-    if (status && status !== "all") {
-      where.status = status
-    }
+
     if (search) {
       where.OR = [
         { name: { contains: search, mode: "insensitive" } },
@@ -33,6 +33,11 @@ export async function GET(request: NextRequest) {
       ]
     }
 
+    if (status) {
+      where.status = status
+    }
+
+    // Get messages with pagination
     const [messages, total] = await Promise.all([
       prisma.contactMessage.findMany({
         where,
@@ -43,21 +48,17 @@ export async function GET(request: NextRequest) {
       prisma.contactMessage.count({ where }),
     ])
 
-    const totalPages = Math.ceil(total / limit)
-
     return NextResponse.json({
       messages,
       pagination: {
         page,
         limit,
         total,
-        totalPages,
-        hasNext: page < totalPages,
-        hasPrev: page > 1,
+        pages: Math.ceil(total / limit),
       },
     })
   } catch (error) {
     console.error("Error fetching contact messages:", error)
-    return NextResponse.json({ error: "Failed to fetch contact messages" }, { status: 500 })
+    return NextResponse.json({ error: "Failed to fetch messages" }, { status: 500 })
   }
 }

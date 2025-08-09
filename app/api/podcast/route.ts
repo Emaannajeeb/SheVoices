@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { getCloudinaryResources, updateCloudinaryMetadata, getVideoThumbnail } from "@/lib/cloudinary"
-
+export const dynamic = "force-dynamic"
 export async function GET() {
   try {
     console.log("Fetching podcast videos from Cloudinary...")

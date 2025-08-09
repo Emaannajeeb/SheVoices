@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { deleteFromCloudinary, updateCloudinaryMetadata, getVideoThumbnail } from "@/lib/cloudinary"
 import cloudinary from "@/lib/cloudinary"
-
+export const dynamic = "force-dynamic"
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const { id } = params

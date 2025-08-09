@@ -1,7 +1,9 @@
 import { Suspense } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { MessageSquare, Mail, CheckCircle, Archive } from "lucide-react"
-import {ContactMessagesClient} from "./contact-messages-client"
+import { ContactMessagesClient} from "./contact-messages-client"
+
+export const dynamic = "force-dynamic"
 
 async function getContactStats() {
   try {
