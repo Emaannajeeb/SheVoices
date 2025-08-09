@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ImageModal } from "@/components/image-modal"
 import { Camera, ImageIcon, Eye, Calendar } from "lucide-react"
+export const dynamic = 'force-dynamic'
 
 interface GalleryImage {
   id: string
