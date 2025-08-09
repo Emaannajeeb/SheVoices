@@ -1,28 +1,79 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Play, Clock, Calendar } from "lucide-react"
-import { prisma } from "@/lib/prisma"
+import { Play, Clock, Calendar, Video, FileVideo } from "lucide-react"
+
+interface PodcastVideo {
+  id: string
+  title: string
+  description?: string
+  videoUrl: string
+  thumbnailUrl?: string
+  duration?: number
+  isActive: boolean
+  createdAt: string
+  publicId: string
+  format: string
+  bytes: number
+  width?: number
+  height?: number
+  category: string
+  tags: string[]
+}
 
 async function getPodcastData() {
   try {
-    const [video, images] = await Promise.all([
-      prisma.podcastVideo.findFirst({
-        where: { isActive: true },
-        orderBy: { createdAt: "desc" },
-      }),
-      prisma.galleryImage.findMany({
-        where: { isActive: true, category: "podcast" },
-        orderBy: { createdAt: "desc" },
-      }),
-    ])
-    return { video, images }
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
+    console.log("Fetching podcast data from:", `${baseUrl}/api/podcast`)
+
+    const response = await fetch(`${baseUrl}/api/podcast`, {
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    })
+
+    console.log("Podcast API response status:", response.status)
+
+    if (!response.ok) {
+      console.error("Failed to fetch podcast data:", response.status, response.statusText)
+      const errorText = await response.text()
+      console.error("Error response:", errorText)
+      return { video: null, videos: [] }
+    }
+
+    const videos: PodcastVideo[] = await response.json()
+    console.log("Fetched videos:", videos.length)
+
+    // Get only active videos
+    const activeVideos = videos.filter((video) => video.isActive)
+    console.log("Active videos:", activeVideos.length)
+
+    // Get the most recent active video as featured
+    const featuredVideo = activeVideos.length > 0 ? activeVideos[0] : null
+
+    return { video: featuredVideo, videos: activeVideos }
   } catch (error) {
     console.error("Error fetching podcast data:", error)
-    return { video: null, images: [] }
+    return { video: null, videos: [] }
   }
 }
 
+function formatDuration(seconds?: number) {
+  if (!seconds) return "Unknown"
+  const mins = Math.floor(seconds / 60)
+  const secs = Math.floor(seconds % 60)
+  return `${mins}:${secs.toString().padStart(2, "0")}`
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes === 0) return "0 Bytes"
+  const k = 1024
+  const sizes = ["Bytes", "KB", "MB", "GB"]
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+}
+
 export default async function PodcastPage() {
-  const { video, images } = await getPodcastData()
+  const { video, videos } = await getPodcastData()
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 pt-20">
@@ -38,6 +89,17 @@ export default async function PodcastPage() {
           </p>
         </div>
 
+        {/* Debug Info - Remove in production */}
+        {process.env.NODE_ENV === "development" && (
+          <Card className="bg-yellow-50 border-yellow-200 mb-8">
+            <CardContent className="p-4">
+              <p className="text-sm text-yellow-800">
+                Debug: Found {videos.length} active videos, Featured: {video ? video.title : "None"}
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Featured Video */}
         {video ? (
           <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg rounded-3xl mb-16">
@@ -46,27 +108,62 @@ export default async function PodcastPage() {
               {video.description && <p className="text-gray-600 max-w-2xl mx-auto">{video.description}</p>}
             </CardHeader>
             <CardContent className="px-8 pb-8">
-              <div className="aspect-video rounded-2xl overflow-hidden shadow-lg mb-6">
-                <video controls poster={video.thumbnailUrl || undefined} className="w-full h-full object-cover">
+              <div className="aspect-video rounded-2xl overflow-hidden shadow-lg mb-6 bg-black">
+                <video
+                  controls
+                  poster={video.thumbnailUrl}
+                  className="w-full h-full object-contain"
+                  preload="metadata"
+                  controlsList="nodownload"
+                >
+                  <source src={video.videoUrl} type={`video/${video.format}`} />
                   <source src={video.videoUrl} type="video/mp4" />
                   Your browser does not support the video tag.
                 </video>
               </div>
 
-              <div className="flex items-center justify-center gap-6 text-sm text-gray-500">
-                {video.duration && (
+              <div className="flex items-center justify-center gap-6 text-sm text-gray-500 flex-wrap">
+                {video.duration && video.duration > 0 && (
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4" />
-                    <span>
-                      {Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, "0")}
-                    </span>
+                    <span>{formatDuration(video.duration)}</span>
                   </div>
                 )}
                 <div className="flex items-center gap-2">
                   <Calendar className="w-4 h-4" />
                   <span>{new Date(video.createdAt).toLocaleDateString()}</span>
                 </div>
+                {video.width && video.height && (
+                  <div className="flex items-center gap-2">
+                    <Video className="w-4 h-4" />
+                    <span>
+                      {video.width}x{video.height}
+                    </span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <FileVideo className="w-4 h-4" />
+                  <span>{formatFileSize(video.bytes)}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="uppercase text-xs font-medium bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                    {video.format}
+                  </span>
+                </div>
               </div>
+
+              {video.tags && video.tags.length > 0 && video.tags[0] !== "" && (
+                <div className="flex flex-wrap gap-2 justify-center mt-4">
+                  {video.tags.map((tag, index) => (
+                    <span
+                      key={index}
+                      className="text-xs bg-gray-100 text-gray-700 px-3 py-1 rounded-full hover:bg-gray-200 transition-colors"
+                    >
+                      {tag.trim()}
+                    </span>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         ) : (
@@ -84,52 +181,87 @@ export default async function PodcastPage() {
           </Card>
         )}
 
-        {/* Photo Gallery */}
-        <div className="mb-16">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent mb-4">
-              Behind the Scenes
-            </h2>
-            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Get a glimpse into our podcast recording sessions, community events, and the amazing women who make
-              SheVoices possible.
-            </p>
-          </div>
+        {/* Additional Videos */}
+        {videos.length > 1 && (
+          <div className="mb-16">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent mb-4">
+                More Episodes
+              </h2>
+              <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+                Explore our collection of inspiring podcast episodes and conversations.
+              </p>
+            </div>
 
-          {images.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {images.map((image) => (
+              {videos.slice(1).map((episode) => (
                 <Card
-                  key={image.id}
-                  className="bg-white/80 backdrop-blur-sm border-0 shadow-lg hover:shadow-xl transition-all duration-300 rounded-2xl overflow-hidden group"
+                  key={episode.id}
+                  className="bg-white/80 backdrop-blur-sm border-0 shadow-lg hover:shadow-xl transition-all duration-300 rounded-2xl overflow-hidden group cursor-pointer"
                 >
-                  <div className="aspect-square overflow-hidden">
-                    <img
-                      src={image.imageUrl || "/placeholder.svg"}
-                      alt={image.altText || image.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
+                  <div className="aspect-video overflow-hidden relative bg-black">
+                    {episode.thumbnailUrl ? (
+                      <img
+                        src={episode.thumbnailUrl || "/placeholder.svg"}
+                        alt={episode.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement
+                          target.style.display = "none"
+                          const parent = target.parentElement
+                          if (parent) {
+                            const fallback = parent.querySelector(".fallback-icon")
+                            if (fallback) {
+                              fallback.classList.remove("hidden")
+                            }
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center">
+                        <Play className="w-12 h-12 text-white" />
+                      </div>
+                    )}
+                    <div className="fallback-icon hidden w-full h-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center absolute inset-0">
+                      <Play className="w-12 h-12 text-white" />
+                    </div>
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300 flex items-center justify-center">
+                      <Play className="w-16 h-16 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                    </div>
+                    {episode.duration && episode.duration > 0 && (
+                      <div className="absolute bottom-2 right-2 bg-black/70 text-white px-2 py-1 rounded text-xs">
+                        {formatDuration(episode.duration)}
+                      </div>
+                    )}
                   </div>
                   <CardContent className="p-4">
-                    <h3 className="font-semibold text-gray-800 text-center">{image.title}</h3>
+                    <h3 className="font-semibold text-gray-800 mb-2 line-clamp-2">{episode.title}</h3>
+                    {episode.description && (
+                      <p className="text-sm text-gray-600 line-clamp-2 mb-3">{episode.description}</p>
+                    )}
+                    <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
+                      <span>{new Date(episode.createdAt).toLocaleDateString()}</span>
+                      <span>{formatFileSize(episode.bytes)}</span>
+                    </div>
+                    {episode.tags && episode.tags.length > 0 && episode.tags[0] !== "" && (
+                      <div className="flex flex-wrap gap-1">
+                        {episode.tags.slice(0, 3).map((tag, index) => (
+                          <span key={index} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
+                            {tag.trim()}
+                          </span>
+                        ))}
+                        {episode.tags.length > 3 && (
+                          <span className="text-xs text-gray-500">+{episode.tags.length - 3} more</span>
+                        )}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}
             </div>
-          ) : (
-            <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg rounded-3xl">
-              <CardContent className="p-16 text-center">
-                <div className="w-24 h-24 bg-gradient-to-r from-pink-400 to-orange-400 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Calendar className="w-12 h-12 text-white" />
-                </div>
-                <h3 className="text-2xl font-bold text-gray-800 mb-4">Gallery Coming Soon</h3>
-                <p className="text-gray-600 max-w-md mx-auto">
-                  We're building our photo gallery to share behind-the-scenes moments and community highlights.
-                </p>
-              </CardContent>
-            </Card>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Call to Action */}
         <Card className="bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400 border-0 shadow-2xl rounded-3xl">

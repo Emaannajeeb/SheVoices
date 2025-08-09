@@ -20,7 +20,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Play, Clock, Video, Calendar } from "lucide-react"
+import { Plus, Search, MoreHorizontal, Trash2, Eye, Play, Clock, Video, FileVideo, RefreshCw } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 
 interface PodcastVideo {
   id: string
@@ -32,6 +33,13 @@ interface PodcastVideo {
   isActive: boolean
   createdAt: string
   updatedAt: string
+  publicId: string
+  format: string
+  bytes: number
+  width?: number
+  height?: number
+  category: string
+  tags: string[]
 }
 
 export default function AdminPodcastPage() {
@@ -40,6 +48,7 @@ export default function AdminPodcastPage() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [deleteVideo, setDeleteVideo] = useState<PodcastVideo | null>(null)
+  const { toast } = useToast()
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -48,18 +57,51 @@ export default function AdminPodcastPage() {
   }, [status])
 
   useEffect(() => {
-    fetchVideos()
-  }, [])
+    if (status === "authenticated") {
+      fetchVideos()
+    }
+  }, [status])
 
   const fetchVideos = async () => {
     try {
-      const response = await fetch("/api/podcast")
+      setLoading(true)
+      console.log("Fetching videos from API...")
+
+      const response = await fetch("/api/podcast", {
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+
+      console.log("Response status:", response.status)
+
       if (response.ok) {
         const data = await response.json()
+        console.log("Fetched videos:", data)
         setVideos(data)
+
+        toast({
+          title: "Success",
+          description: `Loaded ${data.length} videos from Cloudinary`,
+        })
+      } else {
+        const errorData = await response.json()
+        console.error("Failed to fetch videos:", errorData)
+
+        toast({
+          title: "Error",
+          description: "Failed to fetch videos from Cloudinary",
+          variant: "destructive",
+        })
       }
     } catch (error) {
       console.error("Error fetching videos:", error)
+      toast({
+        title: "Error",
+        description: "Network error while fetching videos",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
@@ -67,46 +109,80 @@ export default function AdminPodcastPage() {
 
   const handleDelete = async (video: PodcastVideo) => {
     try {
-      const response = await fetch(`/api/podcast/${video.id}`, {
+      const response = await fetch(`/api/podcast/${video.publicId}`, {
         method: "DELETE",
       })
 
       if (response.ok) {
         setVideos(videos.filter((v) => v.id !== video.id))
         setDeleteVideo(null)
+
+        toast({
+          title: "Success",
+          description: "Video deleted successfully",
+        })
+      } else {
+        throw new Error("Failed to delete video")
       }
     } catch (error) {
       console.error("Error deleting video:", error)
+      toast({
+        title: "Error",
+        description: "Failed to delete video",
+        variant: "destructive",
+      })
     }
   }
 
   const toggleActive = async (video: PodcastVideo) => {
     try {
-      const response = await fetch(`/api/podcast/${video.id}`, {
+      const response = await fetch(`/api/podcast/${video.publicId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          ...video,
+          title: video.title,
+          description: video.description,
           isActive: !video.isActive,
+          tags: video.tags,
         }),
       })
 
       if (response.ok) {
         const updatedVideo = await response.json()
         setVideos(videos.map((v) => (v.id === video.id ? updatedVideo : v)))
+
+        toast({
+          title: "Success",
+          description: `Video ${updatedVideo.isActive ? "activated" : "deactivated"}`,
+        })
+      } else {
+        throw new Error("Failed to update video")
       }
     } catch (error) {
       console.error("Error updating video:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update video",
+        variant: "destructive",
+      })
     }
   }
 
   const formatDuration = (seconds?: number) => {
     if (!seconds) return "Unknown"
     const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
+    const secs = Math.floor(seconds % 60)
     return `${mins}:${secs.toString().padStart(2, "0")}`
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return "0 Bytes"
+    const k = 1024
+    const sizes = ["Bytes", "KB", "MB", "GB"]
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
   }
 
   const filteredVideos = videos.filter(
@@ -115,7 +191,7 @@ export default function AdminPodcastPage() {
       (video.description && video.description.toLowerCase().includes(searchTerm.toLowerCase())),
   )
 
-  if (status === "loading" || loading) {
+  if (status === "loading") {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 pt-20">
         <div className="container mx-auto max-w-7xl px-4 py-8">
@@ -136,14 +212,20 @@ export default function AdminPodcastPage() {
             <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 via-pink-500 to-orange-400 bg-clip-text text-transparent mb-2">
               Podcast Management
             </h1>
-            <p className="text-gray-600">Upload and manage your podcast videos</p>
+            <p className="text-gray-600">Upload and manage your podcast videos from Cloudinary</p>
           </div>
-          <Link href="/admin/podcast/upload">
-            <Button className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl mt-4 md:mt-0">
-              <Plus className="w-4 h-4 mr-2" />
-              Upload Video
+          <div className="flex gap-2 mt-4 md:mt-0">
+            <Button onClick={fetchVideos} variant="outline" className="rounded-xl bg-transparent" disabled={loading}>
+              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+              Refresh
             </Button>
-          </Link>
+            <Link href="/admin/podcast/upload">
+              <Button className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl">
+                <Plus className="w-4 h-4 mr-2" />
+                Upload Video
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {/* Stats Cards */}
@@ -188,18 +270,12 @@ export default function AdminPodcastPage() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">This Month</p>
+                  <p className="text-sm font-medium text-gray-600">Total Size</p>
                   <p className="text-2xl font-bold text-blue-600">
-                    {
-                      videos.filter((v) => {
-                        const videoDate = new Date(v.createdAt)
-                        const now = new Date()
-                        return videoDate.getMonth() === now.getMonth() && videoDate.getFullYear() === now.getFullYear()
-                      }).length
-                    }
+                    {formatFileSize(videos.reduce((acc, v) => acc + v.bytes, 0))}
                   </p>
                 </div>
-                <Calendar className="w-8 h-8 text-blue-500" />
+                <FileVideo className="w-8 h-8 text-blue-500" />
               </div>
             </CardContent>
           </Card>
@@ -229,115 +305,131 @@ export default function AdminPodcastPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Video</TableHead>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Duration</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredVideos.map((video) => (
-                    <TableRow key={video.id}>
-                      <TableCell>
-                        <div className="w-16 h-12 bg-gray-100 rounded-lg overflow-hidden">
-                          {video.thumbnailUrl ? (
-                            <img
-                              src={video.thumbnailUrl || "/placeholder.svg"}
-                              alt={video.title}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
+            {loading ? (
+              <div className="text-center py-12">
+                <RefreshCw className="w-8 h-8 text-gray-400 mx-auto mb-4 animate-spin" />
+                <p className="text-gray-600">Loading videos from Cloudinary...</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Video</TableHead>
+                      <TableHead>Title</TableHead>
+                      <TableHead>Duration</TableHead>
+                      <TableHead>Size</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredVideos.map((video) => (
+                      <TableRow key={video.id}>
+                        <TableCell>
+                          <div className="w-16 h-12 bg-gray-100 rounded-lg overflow-hidden">
+                            {video.thumbnailUrl ? (
+                              <img
+                                src={video.thumbnailUrl || "/placeholder.svg"}
+                                alt={video.title}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement
+                                  target.style.display = "none"
+                                  target.nextElementSibling?.classList.remove("hidden")
+                                }}
+                              />
+                            ) : null}
                             <div className="w-full h-full flex items-center justify-center">
                               <Play className="w-6 h-6 text-gray-400" />
                             </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium text-gray-900 line-clamp-1">{video.title}</div>
-                          {video.description && (
-                            <div className="text-sm text-gray-500 line-clamp-1">{video.description}</div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <Clock className="w-4 h-4" />
-                          {formatDuration(video.duration)}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={video.isActive ? "default" : "secondary"}
-                          className={video.isActive ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"}
-                        >
-                          {video.isActive ? "Active" : "Inactive"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm text-gray-600">{new Date(video.createdAt).toLocaleDateString()}</div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreHorizontal className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem asChild>
-                              <Link href="/podcast" target="_blank">
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium text-gray-900 line-clamp-1">{video.title}</div>
+                            {video.description && (
+                              <div className="text-sm text-gray-500 line-clamp-1">{video.description}</div>
+                            )}
+                            <div className="text-xs text-gray-400 mt-1">
+                              {video.width}x{video.height} • {video.format.toUpperCase()}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2 text-sm text-gray-600">
+                            <Clock className="w-4 h-4" />
+                            {formatDuration(video.duration)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm text-gray-600">{formatFileSize(video.bytes)}</div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={video.isActive ? "default" : "secondary"}
+                            className={video.isActive ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"}
+                          >
+                            {video.isActive ? "Active" : "Inactive"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm text-gray-600">{new Date(video.createdAt).toLocaleDateString()}</div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem asChild>
+                                <Link href="/podcast" target="_blank">
+                                  <Eye className="w-4 h-4 mr-2" />
+                                  View on Site
+                                </Link>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => window.open(video.videoUrl, "_blank")}>
+                                <Play className="w-4 h-4 mr-2" />
+                                Play Video
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => toggleActive(video)}>
                                 <Eye className="w-4 h-4 mr-2" />
-                                View
-                              </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                              <Link href={`/admin/podcast/edit/${video.id}`}>
-                                <Edit className="w-4 h-4 mr-2" />
-                                Edit
-                              </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => toggleActive(video)}>
-                              <Eye className="w-4 h-4 mr-2" />
-                              {video.isActive ? "Deactivate" : "Activate"}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setDeleteVideo(video)} className="text-red-600">
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                                {video.isActive ? "Deactivate" : "Activate"}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setDeleteVideo(video)} className="text-red-600">
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
 
-              {filteredVideos.length === 0 && (
-                <div className="text-center py-12">
-                  <Video className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No videos found</h3>
-                  <p className="text-gray-500 mb-4">
-                    {searchTerm
-                      ? "Try adjusting your search terms"
-                      : "Get started by uploading your first podcast video"}
-                  </p>
-                  <Link href="/admin/podcast/upload">
-                    <Button className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Upload First Video
-                    </Button>
-                  </Link>
-                </div>
-              )}
-            </div>
+                {filteredVideos.length === 0 && !loading && (
+                  <div className="text-center py-12">
+                    <Video className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No videos found</h3>
+                    <p className="text-gray-500 mb-4">
+                      {searchTerm
+                        ? "Try adjusting your search terms"
+                        : "Get started by uploading your first podcast video to Cloudinary"}
+                    </p>
+                    <Link href="/admin/podcast/upload">
+                      <Button className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Upload First Video
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -347,7 +439,8 @@ export default function AdminPodcastPage() {
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Podcast Video</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to delete "{deleteVideo?.title}"? This action cannot be undone.
+                Are you sure you want to delete "{deleteVideo?.title}"? This will permanently remove the video from
+                Cloudinary and cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
