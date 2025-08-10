@@ -34,25 +34,25 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const videoUrl = cloudinary.url(resource.public_id, {
       resource_type: "video",
-      format: resource.format,
       transformation: [{ quality: "auto" }],
     })
 
     const video = {
       id: resource.public_id,
-      title: resource.context?.custom?.title || resource.display_name || resource.public_id,
-      description: resource.context?.custom?.description || "",
+      // FIXED: Access context without .custom property
+      title: resource.context?.title || resource.display_name || resource.public_id,
+      description: resource.context?.description || "",
       videoUrl,
       thumbnailUrl,
       duration: resource.duration || 0,
-      isActive: resource.context?.custom?.isActive !== "false",
+      isActive: resource.context?.isActive !== "false",
       createdAt: resource.created_at,
       publicId: resource.public_id,
       format: resource.format,
       bytes: resource.bytes,
       width: resource.width,
       height: resource.height,
-      category: resource.context?.custom?.category || "general",
+      category: resource.context?.category || "general",
       tags: resource.tags || [],
     }
 
@@ -75,15 +75,18 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     const body = await request.json()
     const { title, description, isActive, category, tags } = body
 
-    // Update context in Cloudinary
+    // FIXED: Use pipe-separated string format for context
+    const contextParts = []
+    if (title) contextParts.push(`title=${encodeURIComponent(title)}`)
+    if (description) contextParts.push(`description=${encodeURIComponent(description)}`)
+    if (category) contextParts.push(`category=${encodeURIComponent(category)}`)
+    contextParts.push(`isActive=${isActive.toString()}`)
+    
+    const contextString = contextParts.join('|')
+
     await cloudinary.api.update(id, {
       resource_type: "video",
-      context: {
-        title,
-        description,
-        isActive: isActive.toString(),
-        category,
-      },
+      context: contextString,
       tags: tags || [],
     })
 
@@ -94,10 +97,10 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 
     const video = {
       id: resource.public_id,
-      title: resource.context?.custom?.title || title,
-      description: resource.context?.custom?.description || description,
-      isActive: resource.context?.custom?.isActive !== "false",
-      category: resource.context?.custom?.category || category,
+      title: resource.context?.title || title,
+      description: resource.context?.description || description,
+      isActive: resource.context?.isActive !== "false",
+      category: resource.context?.category || category,
       tags: resource.tags || tags,
       updatedAt: new Date().toISOString(),
     }
