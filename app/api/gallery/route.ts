@@ -1,99 +1,211 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
-import { v2 as cloudinary } from "cloudinary"
+import { type NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { v2 as cloudinary } from "cloudinary";
 
-export const dynamic = "force-dynamic"
+export const dynamic = "force-dynamic";
 
-// Configure Cloudinary
+interface CloudinaryResource {
+  public_id: string;
+  filename?: string;
+  display_name?: string;
+  secure_url: string;
+  created_at: string;
+  format: string;
+  bytes: number;
+  width?: number;
+  height?: number;
+  context?: {
+    title?: string;
+    description?: string;
+    category?: string;
+    isActive?: string;
+    published?: string;
+    tags?: string;
+  };
+  tags?: string[];
+}
+
+interface ProcessedImage {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl: string;
+  thumbnailUrl: string;
+  altText: string;
+  category: string;
+  isActive: boolean;
+  published: boolean;
+  createdAt: string;
+  updatedAt: string;
+  publicId: string;
+  format: string;
+  bytes: number;
+  width?: number;
+  height?: number;
+  tags: string[];
+}
+
+interface GroupedImages {
+  [category: string]: ProcessedImage[];
+}
+
+// Fixed: Ensure correct environment variable name
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-})
+  api_secret: process.env.CLOUDINARY_API_SECRET, // Fixed: Use CLOUDINARY_API_SECRET
+});
+
+export async function GET(request: NextRequest) {
+  try {
+    console.log('🔍 Gallery GET API called');
+    
+    const { searchParams } = new URL(request.url);
+    const category = searchParams.get("category");
+
+    // Simplified search without folder restrictions
+    let expression = "resource_type:image";
+    if (category && category !== "all") {
+      expression += ` AND context.category=${category}`;
+    }
+
+    console.log('Search expression:', expression);
+
+    const result = await cloudinary.search
+      .expression(expression)
+      .sort_by("created_at", "desc")
+      .max_results(100)
+      .execute();
+
+    console.log(`Found ${result.resources.length} images`);
+
+    const images: ProcessedImage[] = result.resources
+      .filter((resource: CloudinaryResource) => {
+        const isActive = resource.context?.isActive;
+        const published = resource.context?.published;
+        return (isActive === undefined || isActive === "true") && 
+               (published === undefined || published === "true");
+      })
+      .map((resource: CloudinaryResource): ProcessedImage => ({
+        id: resource.public_id,
+        title: resource.context?.title || resource.filename || "Untitled",
+        description: resource.context?.description || "",
+        imageUrl: resource.secure_url,
+        thumbnailUrl: cloudinary.url(resource.public_id, {
+          width: 400,
+          height: 300,
+          crop: "fill",
+          quality: "auto",
+        }),
+        altText: resource.context?.title || resource.filename || "",
+        category: resource.context?.category || category || "general",
+        isActive: resource.context?.isActive !== "false",
+        published: resource.context?.published !== "false",
+        createdAt: resource.created_at,
+        updatedAt: resource.created_at,
+        publicId: resource.public_id,
+        format: resource.format,
+        bytes: resource.bytes,
+        width: resource.width,
+        height: resource.height,
+        tags: resource.context?.tags ? resource.context.tags.split(",") : [],
+      }));
+
+    if (!category) {
+      const groupedImages: GroupedImages = images.reduce(
+        (acc: GroupedImages, image: ProcessedImage) => {
+          if (!acc[image.category]) {
+            acc[image.category] = [];
+          }
+          acc[image.category].push(image);
+          return acc;
+        },
+        {} as GroupedImages
+      );
+
+      return NextResponse.json({ 
+        images, 
+        categories: Object.keys(groupedImages), 
+        groupedImages 
+      });
+    }
+
+    return NextResponse.json({ images, category });
+  } catch (error) {
+    console.error('Gallery GET error:', error);
+    return NextResponse.json(
+      { 
+        error: "Failed to fetch images", 
+        message: (error as Error).message || "Unknown error" 
+      },
+      { status: 500 }
+    );
+  }
+}
 
 export async function POST(request: NextRequest) {
-  console.log('🚀 GALLERY UPLOAD API CALLED')
+  console.log('🚀 Gallery POST API called');
   
   try {
-    // Step 1: Environment validation
-    const envCheck = {
-      cloud_name: !!process.env.CLOUDINARY_CLOUD_NAME,
-      api_key: !!process.env.CLOUDINARY_API_KEY,
-      api_secret: !!process.env.CLOUDINARY_API_SECRET
-    }
-    console.log('Environment check:', envCheck)
+    // Environment validation
+    const hasConfig = !!(process.env.CLOUDINARY_CLOUD_NAME && 
+                        process.env.CLOUDINARY_API_KEY && 
+                        process.env.CLOUDINARY_API_SECRET);
     
-    if (!envCheck.cloud_name || !envCheck.api_key || !envCheck.api_secret) {
-      console.error('❌ Missing Cloudinary environment variables')
-      return NextResponse.json({ error: "Server configuration error" }, { status: 500 })
+    if (!hasConfig) {
+      console.error('❌ Missing Cloudinary configuration');
+      return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
     }
 
-    // Step 2: Authentication check
-    const session = await getServerSession(authOptions)
-    console.log('Authentication check:', !!session)
-    
+    // Authentication check
+    const session = await getServerSession(authOptions);
     if (!session) {
-      console.error('❌ Authentication failed')
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      console.error('❌ Authentication failed');
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Step 3: Parse and validate request body
-    let body
-    try {
-      body = await request.json()
-      console.log('Request body received:', JSON.stringify(body, null, 2))
-    } catch (error) {
-      console.error('❌ Failed to parse request body:', error)
-      return NextResponse.json({ error: "Invalid request body" }, { status: 400 })
-    }
-
-    const { publicId, title, description, category, isActive = true, published = true, tags = [] } = body
-
-    // Step 4: Validate required fields
-    console.log('Field validation:', {
-      hasPublicId: !!publicId,
-      hasTitle: !!title,
-      publicIdValue: publicId,
-      titleValue: title
-    })
-
-    if (!publicId || !title) {
-      console.error('❌ Missing required fields')
-      return NextResponse.json({ 
-        error: "Public ID and title are required",
-        received: { publicId: !!publicId, title: !!title }
-      }, { status: 400 })
-    }
-
-    // Step 5: SIMPLIFIED UPDATE - NO CONTEXT PARAMETER
-    console.log('Performing simplified Cloudinary update without context...')
+    // Parse request body
+    const body = await request.json();
+    console.log('Request body:', body);
     
-    try {
-      // First, verify the resource exists
-      const resourceCheck = await cloudinary.api.resource(publicId, {
-        resource_type: 'image'
-      })
-      console.log('✅ Resource exists:', resourceCheck.public_id)
-    } catch (resourceError: any) {
-      console.error('❌ Resource not found:', resourceError.message)
+    const { publicId, title, description, category, isActive = true, published = true, tags = [] } = body;
+    
+    if (!publicId || !title) {
+      console.error('❌ Missing required fields');
       return NextResponse.json({ 
-        error: "Image not found in Cloudinary",
-        publicId: publicId 
-      }, { status: 404 })
+        error: "Public ID and title are required" 
+      }, { status: 400 });
     }
 
-    // Perform minimal update - just tags without context
-    const updateResult = await cloudinary.api.update(publicId, {
-      resource_type: 'image',
-      tags: Array.isArray(tags) ? tags : (tags ? tags.split(',') : [])
-      // NO CONTEXT PARAMETER TO AVOID 400 ERROR
-    })
+    // FIXED: Create context string in proper pipe-separated format
+    const contextParts = [
+      `title=${encodeURIComponent(title)}`,
+      `description=${encodeURIComponent(description || "")}`,
+      `category=${encodeURIComponent(category || "general")}`,
+      `isActive=${isActive.toString()}`,
+      `published=${published.toString()}`,
+    ];
 
-    console.log('✅ Update successful:', updateResult.public_id)
+    if (Array.isArray(tags) && tags.length > 0) {
+      contextParts.push(`tags=${encodeURIComponent(tags.join(","))}`);
+    } else if (typeof tags === "string" && tags.trim()) {
+      contextParts.push(`tags=${encodeURIComponent(tags)}`);
+    }
+
+    const contextString = contextParts.join("|");
+    console.log('Context string:', contextString);
+
+    // Update metadata in Cloudinary
+    await cloudinary.api.update(publicId, {
+      resource_type: "image",
+      context: contextString, // Use pipe-separated string format
+    });
+
+    console.log('✅ Metadata updated successfully');
 
     return NextResponse.json({
-      message: "Gallery image updated successfully (simplified)",
+      message: "Gallery image metadata updated successfully",
       publicId,
       title,
       description,
@@ -101,55 +213,30 @@ export async function POST(request: NextRequest) {
       isActive,
       published,
       tags,
-      warning: "Context metadata not updated due to API limitations"
-    }, { status: 200 })
+    });
 
   } catch (error: any) {
-    console.error('💥 DETAILED ERROR ANALYSIS:')
-    console.error('Error type:', typeof error)
-    console.error('Error name:', error.name)
-    console.error('Error message:', error.message)
-    console.error('HTTP code:', error.http_code)
-    console.error('Error stack:', error.stack)
-    console.error('Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2))
+    console.error('💥 Gallery POST error:', error);
+    
+    let statusCode = 500;
+    let errorMessage = "Failed to update gallery image";
 
-    // Extract specific Cloudinary error details
-    let statusCode = 500
-    let errorMessage = "Failed to update gallery image"
-    let cloudinaryDetails = null
-
-    if (error.http_code) {
-      statusCode = error.http_code
-      cloudinaryDetails = {
-        http_code: error.http_code,
-        message: error.message,
-        error_type: error.name
-      }
-
-      switch (error.http_code) {
-        case 400:
-          errorMessage = `Cloudinary Bad Request: ${error.message}`
-          break
-        case 401:
-          errorMessage = "Cloudinary authentication failed"
-          break
-        case 404:
-          errorMessage = "Resource not found in Cloudinary"
-          break
-        default:
-          errorMessage = `Cloudinary error (${error.http_code}): ${error.message}`
-      }
+    // Handle specific Cloudinary errors
+    if (error.http_code === 400) {
+      statusCode = 400;
+      errorMessage = `Cloudinary Bad Request: ${error.message}`;
+    } else if (error.http_code === 401) {
+      statusCode = 401;
+      errorMessage = "Cloudinary authentication failed";
+    } else if (error.http_code === 404) {
+      statusCode = 404;
+      errorMessage = "Image not found in Cloudinary";
     }
 
     return NextResponse.json({ 
       error: errorMessage,
       details: error.message,
-      cloudinary_error: cloudinaryDetails,
-      debug_info: {
-        timestamp: new Date().toISOString(),
-        error_type: error.name,
-        stack_available: !!error.stack
-      }
-    }, { status: statusCode })
+      cloudinary_code: error.http_code
+    }, { status: statusCode });
   }
 }
