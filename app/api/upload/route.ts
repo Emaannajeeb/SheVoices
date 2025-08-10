@@ -54,18 +54,15 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(bytes)
     console.log('Buffer created:', buffer.length, 'bytes')
 
-    // UPDATED: Upload to /podcast folder instead of root
-    console.log('Starting upload to podcast folder...')
+    // MINIMAL UPLOAD TEST - Just upload to root folder
+    console.log('Starting minimal upload test...')
     
     const result = await new Promise<any>((resolve, reject) => {
       cloudinary.uploader.upload_stream(
         {
-          folder: 'podcast',           // 🔥 ADDED: Upload to podcast folder
-          resource_type: 'video',      // 🔥 ADDED: Specify video resource type
-          quality: 'auto',
-          format: 'auto',
-          use_filename: true,
-          unique_filename: true,
+          // Minimal options - no folder, no context, just upload
+          resource_type: 'auto',
+          quality: 'auto'
         },
         (error, result) => {
           if (error) {
@@ -76,7 +73,7 @@ export async function POST(request: NextRequest) {
             console.error('Full Error:', JSON.stringify(error, null, 2))
             reject(error)
           } else {
-            console.log('✅ SUCCESS - Uploaded to podcast folder:', result?.public_id)
+            console.log('✅ SUCCESS:', result?.public_id)
             resolve(result)
           }
         }
@@ -86,8 +83,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       publicId: result.public_id,
-      url: result.secure_url,
-      folder: 'podcast'  // Confirm folder in response
+      url: result.secure_url
     })
 
   } catch (error: any) {
