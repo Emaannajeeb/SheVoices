@@ -1,6 +1,9 @@
+'use client'
+
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Play, Clock, Calendar, Video, FileVideo } from "lucide-react"
-export const dynamic = 'force-dynamic'
+import { Play, Clock, Calendar, Video, FileVideo, RefreshCw, AlertTriangle } from "lucide-react"
+
 interface PodcastVideo {
   id: string
   title: string
@@ -19,67 +22,116 @@ interface PodcastVideo {
   tags: string[]
 }
 
-async function getPodcastData() {
-  try {
-    // Use a more direct approach like your admin page
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'https://she-voices.vercel.app'}/api/podcast`, {
-      cache: "no-store",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      // Remove timeout for server-side rendering
-    })
+export default function PodcastPage() {
+  const [videos, setVideos] = useState<PodcastVideo[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-    console.log("Podcast API response status:", response.status)
+  useEffect(() => {
+    fetchPodcastData()
+  }, [])
 
-    if (!response.ok) {
-      console.error("Failed to fetch podcast data:", response.status, response.statusText)
-      const errorText = await response.text()
-      console.error("Error response:", errorText)
-      return { video: null, videos: [] }
+  const fetchPodcastData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      console.log("Fetching podcast data...")
+
+      const response = await fetch("/api/podcast", {
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+
+      console.log("Response status:", response.status)
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch podcast data: ${response.status}`)
+      }
+
+      const data = await response.json()
+      console.log("Fetched data:", data)
+      
+      // Ensure data is an array
+      const videosArray: PodcastVideo[] = Array.isArray(data) ? data : []
+      
+      // Filter for active videos only
+      const activeVideos = videosArray.filter((video: PodcastVideo) => video.isActive !== false)
+      console.log(`Found ${activeVideos.length} active videos out of ${videosArray.length} total`)
+      
+      setVideos(activeVideos)
+    } catch (err) {
+      console.error("Error fetching podcast data:", err)
+      setError(err instanceof Error ? err.message : 'Unknown error')
+    } finally {
+      setLoading(false)
     }
-
-    const data = await response.json()
-    console.log("Raw API response:", data)
-    
-    // Ensure data is an array (matching your admin page logic)
-    const videos: PodcastVideo[] = Array.isArray(data) ? data : []
-    console.log("Processed videos:", videos.length)
-
-    // Filter for active videos only
-    const activeVideos = videos.filter((video) => video.isActive !== false)
-    console.log("Active videos:", activeVideos.length)
-
-    // Get the most recent active video as featured
-    const featuredVideo = activeVideos.length > 0 ? activeVideos[0] : null
-
-    return { video: featuredVideo, videos: activeVideos }
-  } catch (error) {
-    console.error("Error fetching podcast data:", error)
-    return { video: null, videos: [] }
   }
-}
 
+  const formatDuration = (seconds?: number) => {
+    if (!seconds) return "Unknown"
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.floor(seconds % 60)
+    return `${mins}:${secs.toString().padStart(2, "0")}`
+  }
 
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return "0 Bytes"
+    const k = 1024
+    const sizes = ["Bytes", "KB", "MB", "GB"]
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+  }
 
-function formatDuration(seconds?: number) {
-  if (!seconds) return "Unknown"
-  const mins = Math.floor(seconds / 60)
-  const secs = Math.floor(seconds % 60)
-  return `${mins}:${secs.toString().padStart(2, "0")}`
-}
+  const featuredVideo = videos.length > 0 ? videos[0] : null
 
-function formatFileSize(bytes: number) {
-  if (bytes === 0) return "0 Bytes"
-  const k = 1024
-  const sizes = ["Bytes", "KB", "MB", "GB"]
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
-}
+  // Loading State
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 pt-20">
+        <div className="container mx-auto max-w-6xl px-4 py-12">
+          <div className="text-center">
+            <RefreshCw className="w-12 h-12 text-purple-500 mx-auto mb-4 animate-spin" />
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">Loading Podcast Content...</h2>
+            <p className="text-gray-600">Please wait while we fetch the latest episodes.</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
-export default async function PodcastPage() {
-  const { video, videos } = await getPodcastData()
+  // Error State
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 pt-20">
+        <div className="container mx-auto max-w-6xl px-4 py-12">
+          <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg rounded-3xl">
+            <CardContent className="p-12 text-center">
+              <div className="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <AlertTriangle className="w-12 h-12 text-red-500" />
+              </div>
+              <h2 className="text-3xl font-bold text-gray-800 mb-4">
+                Oops! Something went wrong
+              </h2>
+              <p className="text-gray-600 mb-6 max-w-md mx-auto">
+                We're having trouble loading the podcast content. Error: {error}
+              </p>
+              <button
+                onClick={fetchPodcastData}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-full transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Try Again
+              </button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
+  }
 
+  // Main Content
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 pt-20">
       <div className="container mx-auto max-w-6xl px-4 py-12">
@@ -94,72 +146,72 @@ export default async function PodcastPage() {
           </p>
         </div>
 
-        {/* Debug Info - Remove in production */}
+        {/* Debug Info - Development Only */}
         {process.env.NODE_ENV === "development" && (
           <Card className="bg-yellow-50 border-yellow-200 mb-8">
             <CardContent className="p-4">
               <p className="text-sm text-yellow-800">
-                Debug: Found {videos.length} active videos, Featured: {video ? video.title : "None"}
+                Debug: Found {videos.length} active videos, Featured: {featuredVideo ? featuredVideo.title : "None"}
               </p>
             </CardContent>
           </Card>
         )}
 
         {/* Featured Video */}
-        {video ? (
+        {featuredVideo ? (
           <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg rounded-3xl mb-16">
             <CardHeader className="text-center pb-6">
-              <CardTitle className="text-3xl font-bold text-gray-800 mb-4">{video.title}</CardTitle>
-              {video.description && <p className="text-gray-600 max-w-2xl mx-auto">{video.description}</p>}
+              <CardTitle className="text-3xl font-bold text-gray-800 mb-4">{featuredVideo.title}</CardTitle>
+              {featuredVideo.description && <p className="text-gray-600 max-w-2xl mx-auto">{featuredVideo.description}</p>}
             </CardHeader>
             <CardContent className="px-8 pb-8">
               <div className="aspect-video rounded-2xl overflow-hidden shadow-lg mb-6 bg-black">
                 <video
                   controls
-                  poster={video.thumbnailUrl}
+                  poster={featuredVideo.thumbnailUrl}
                   className="w-full h-full object-contain"
                   preload="metadata"
                   controlsList="nodownload"
                 >
-                  <source src={video.videoUrl} type={`video/${video.format}`} />
-                  <source src={video.videoUrl} type="video/mp4" />
+                  <source src={featuredVideo.videoUrl} type={`video/${featuredVideo.format}`} />
+                  <source src={featuredVideo.videoUrl} type="video/mp4" />
                   Your browser does not support the video tag.
                 </video>
               </div>
 
               <div className="flex items-center justify-center gap-6 text-sm text-gray-500 flex-wrap">
-                {video.duration && video.duration > 0 && (
+                {featuredVideo.duration && featuredVideo.duration > 0 && (
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4" />
-                    <span>{formatDuration(video.duration)}</span>
+                    <span>{formatDuration(featuredVideo.duration)}</span>
                   </div>
                 )}
                 <div className="flex items-center gap-2">
                   <Calendar className="w-4 h-4" />
-                  <span>{new Date(video.createdAt).toLocaleDateString()}</span>
+                  <span>{new Date(featuredVideo.createdAt).toLocaleDateString()}</span>
                 </div>
-                {video.width && video.height && (
+                {featuredVideo.width && featuredVideo.height && (
                   <div className="flex items-center gap-2">
                     <Video className="w-4 h-4" />
                     <span>
-                      {video.width}x{video.height}
+                      {featuredVideo.width}x{featuredVideo.height}
                     </span>
                   </div>
                 )}
                 <div className="flex items-center gap-2">
                   <FileVideo className="w-4 h-4" />
-                  <span>{formatFileSize(video.bytes)}</span>
+                  <span>{formatFileSize(featuredVideo.bytes)}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="uppercase text-xs font-medium bg-purple-100 text-purple-700 px-2 py-1 rounded">
-                    {video.format}
+                    {featuredVideo.format}
                   </span>
                 </div>
               </div>
 
-              {video.tags && video.tags.length > 0 && video.tags[0] !== "" && (
+              {featuredVideo.tags && featuredVideo.tags.length > 0 && featuredVideo.tags[0] !== "" && (
                 <div className="flex flex-wrap gap-2 justify-center mt-4">
-                  {video.tags.map((tag, index) => (
+                  {featuredVideo.tags.map((tag, index) => (
                     <span
                       key={index}
                       className="text-xs bg-gray-100 text-gray-700 px-3 py-1 rounded-full hover:bg-gray-200 transition-colors"
@@ -203,11 +255,15 @@ export default async function PodcastPage() {
                 <Card
                   key={episode.id}
                   className="bg-white/80 backdrop-blur-sm border-0 shadow-lg hover:shadow-xl transition-all duration-300 rounded-2xl overflow-hidden group cursor-pointer"
+                  onClick={() => {
+                    // Optional: Add click handler for episode selection
+                    console.log('Selected episode:', episode.title)
+                  }}
                 >
                   <div className="aspect-video overflow-hidden relative bg-black">
                     {episode.thumbnailUrl ? (
                       <img
-                        src={episode.thumbnailUrl || "/placeholder.svg"}
+                        src={episode.thumbnailUrl}
                         alt={episode.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         loading="lazy"
@@ -267,6 +323,18 @@ export default async function PodcastPage() {
             </div>
           </div>
         )}
+
+        {/* Refresh Button */}
+        <div className="text-center mb-8">
+          <button
+            onClick={fetchPodcastData}
+            disabled={loading}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-purple-100 hover:bg-purple-200 text-purple-700 font-medium rounded-full transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh Content
+          </button>
+        </div>
 
         {/* Call to Action */}
         <Card className="bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400 border-0 shadow-2xl rounded-3xl">
