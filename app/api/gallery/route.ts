@@ -5,7 +5,7 @@ import { v2 as cloudinary } from "cloudinary"
 
 export const dynamic = "force-dynamic"
 
-// TypeScript interfaces for type safety
+// TypeScript interfaces
 interface CloudinaryResource {
   public_id: string
   filename?: string
@@ -65,27 +65,26 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const category = searchParams.get("category")
 
-    // Determine folder to search
-    let folder = "shevoices/gallery"
+    console.log('Searching for images, category filter:', category)
+
+    // SIMPLIFIED: Search all images without folder restriction
+    let searchExpression = "resource_type:image"
+    
+    // Add category filter if specified
     if (category && category !== "all") {
-      folder = `shevoices/gallery/${category}`
+      searchExpression = `resource_type:image AND context.category:${category}`
     }
 
-    console.log('Searching folder:', folder)
-
-    // Fetch images from Cloudinary using direct search
     const result = await cloudinary.search
-      .expression(`folder:${folder} AND resource_type:image`)
+      .expression(searchExpression)
       .sort_by("created_at", "desc")
       .max_results(100)
       .execute()
 
     console.log(`Found ${result.resources.length} images`)
 
-    // Process images with proper type annotations
     const images: ProcessedImage[] = result.resources
       .filter((resource: CloudinaryResource) => {
-        // Only show active/published images
         const isActive = resource.context?.isActive
         const published = resource.context?.published
         return (isActive === undefined || isActive === "true") && 
@@ -116,7 +115,6 @@ export async function GET(request: NextRequest) {
         tags: resource.context?.tags ? resource.context.tags.split(",") : [],
       }))
 
-    // Group by category if no specific category requested
     if (!category) {
       const groupedImages: GroupedImages = images.reduce(
         (acc: GroupedImages, image: ProcessedImage) => {
@@ -151,7 +149,7 @@ export async function POST(request: NextRequest) {
   console.log('🚀 Gallery POST API called')
   
   try {
-    // Environment variables check
+    // Environment check
     const hasConfig = !!(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET)
     console.log('Config check:', hasConfig)
     
@@ -160,7 +158,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Server configuration error" }, { status: 500 })
     }
 
-    // Authentication check
+    // Session check
     const session = await getServerSession(authOptions)
     console.log('Session check:', !!session)
     
@@ -169,7 +167,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Parse request body
     const body = await request.json()
     console.log('Request body:', body)
     
@@ -180,28 +177,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Public ID and title are required" }, { status: 400 })
     }
 
-    // Create context string in proper format (pipe-separated)
-    const contextParts: string[] = []
-    if (title && title.trim()) contextParts.push(`title=${encodeURIComponent(title.trim())}`)
-    if (description && description.trim()) contextParts.push(`description=${encodeURIComponent(description.trim())}`)
-    if (category && category.trim()) contextParts.push(`category=${encodeURIComponent(category.trim())}`)
-    contextParts.push(`isActive=${isActive.toString()}`)
-    contextParts.push(`published=${published.toString()}`)
-    if (Array.isArray(tags) && tags.length > 0) {
-      contextParts.push(`tags=${encodeURIComponent(tags.join(','))}`)
-    } else if (typeof tags === 'string' && tags.trim()) {
-      contextParts.push(`tags=${encodeURIComponent(tags.trim())}`)
-    }
-    
-    const contextString = contextParts.join('|')
-    console.log('Context string:', contextString)
-
-    // Update image metadata in Cloudinary
+    // SIMPLIFIED: Update without complex context formatting
     console.log('Updating metadata for:', publicId)
     
+    // Simple context update - no complex pipe formatting
+    const contextData: any = {
+      title: title,
+      description: description || "",
+      category: category || "general",
+      isActive: isActive.toString(),
+      published: published.toString()
+    }
+
+    if (Array.isArray(tags) && tags.length > 0) {
+      contextData.tags = tags.join(',')
+    } else if (typeof tags === 'string' && tags.trim()) {
+      contextData.tags = tags.trim()
+    }
+
     await cloudinary.api.update(publicId, {
       resource_type: 'image',
-      context: contextString, // Use pipe-separated string format
+      context: contextData, // Use object format directly
       tags: Array.isArray(tags) ? tags : (tags ? tags.split(',') : [])
     })
 
@@ -220,13 +216,10 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('💥 GALLERY POST ERROR:')
-    console.error('Error name:', error.name)
     console.error('Error message:', error.message)
     console.error('HTTP code:', error.http_code)
-    console.error('Stack trace:', error.stack)
-    console.error('Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2))
+    console.error('Full error:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2))
 
-    // Determine appropriate status code and message
     let statusCode = 500
     let errorMessage = "Failed to update gallery image"
 
