@@ -21,20 +21,13 @@ interface PodcastVideo {
 
 async function getPodcastData() {
   try {
-    // More robust URL handling
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
-                   process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 
-                   "http://localhost:3000"
-    
-    console.log("Fetching podcast data from:", `${baseUrl}/api/podcast`)
-
-    const response = await fetch(`${baseUrl}/api/podcast`, {
+    // Use a more direct approach like your admin page
+    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'https://she-voices.vercel.app'}/api/podcast`, {
       cache: "no-store",
       headers: {
         "Content-Type": "application/json",
       },
-      // Add timeout to prevent hanging
-      signal: AbortSignal.timeout(10000) // 10 second timeout
+      // Remove timeout for server-side rendering
     })
 
     console.log("Podcast API response status:", response.status)
@@ -43,33 +36,18 @@ async function getPodcastData() {
       console.error("Failed to fetch podcast data:", response.status, response.statusText)
       const errorText = await response.text()
       console.error("Error response:", errorText)
-      
-      // Return empty data instead of throwing
       return { video: null, videos: [] }
     }
 
     const data = await response.json()
     console.log("Raw API response:", data)
     
-    // Handle both array and object responses
-    const videos: PodcastVideo[] = Array.isArray(data) ? data : (data.videos || [])
+    // Ensure data is an array (matching your admin page logic)
+    const videos: PodcastVideo[] = Array.isArray(data) ? data : []
     console.log("Processed videos:", videos.length)
 
-    // Validate video data structure
-    const validVideos = videos.filter((video) => {
-      const isValid = video && 
-                     typeof video.id === 'string' && 
-                     typeof video.title === 'string' &&
-                     typeof video.videoUrl === 'string'
-      
-      if (!isValid) {
-        console.warn('Invalid video data:', video)
-      }
-      return isValid
-    })
-
-    // Get only active videos
-    const activeVideos = validVideos.filter((video) => video.isActive !== false)
+    // Filter for active videos only
+    const activeVideos = videos.filter((video) => video.isActive !== false)
     console.log("Active videos:", activeVideos.length)
 
     // Get the most recent active video as featured
@@ -78,11 +56,10 @@ async function getPodcastData() {
     return { video: featuredVideo, videos: activeVideos }
   } catch (error) {
     console.error("Error fetching podcast data:", error)
-    
-    // Return empty data instead of throwing to prevent page crash
     return { video: null, videos: [] }
   }
 }
+
 
 
 function formatDuration(seconds?: number) {
