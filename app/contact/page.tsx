@@ -180,6 +180,7 @@ export default function ContactPage() {
               </form>
             </CardContent>
           </Card>
+          
 
           {/* Contact Information - Same as before */}
           <div className="space-y-8">
@@ -208,12 +209,12 @@ export default function ContactPage() {
                     <div>
                       <h4 className="font-semibold text-gray-800">WhatsApp</h4>
                       <a
-                        href="https://wa.me/1234567890"
+                        href="https://wa.me/923390012836"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-green-600 hover:text-green-700"
                       >
-                        Chat with us instantly
+                       +92 339 0012836
                       </a>
                     </div>
                   </div>
@@ -224,8 +225,8 @@ export default function ContactPage() {
                     </div>
                     <div>
                       <h4 className="font-semibold text-gray-800">Phone</h4>
-                      <a href="tel:+1234567890" className="text-orange-600 hover:text-orange-700">
-                        +1 (234) 567-8900
+                      <a href="tel:+923390012836" className="text-orange-600 hover:text-orange-700">
+                        +92 339 0012836
                       </a>
                     </div>
                   </div>
@@ -249,7 +250,7 @@ export default function ContactPage() {
                   asChild
                 >
                   <a
-                    href="https://wa.me/1234567890?text=Hi! I'd like to connect with SheVoices."
+                    href="https://wa.me/923390012836?text=Hi! I'd like to connect with SheVoices."
                     target="_blank"
                     rel="noopener noreferrer"
                   >

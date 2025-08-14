@@ -16,7 +16,7 @@ export function Footer() {
                   className="w-8 h-8 object-contain rounded-full"
                 />
               </div>
-              
+
               <span className="text-xl font-bold bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent">
                 SheVoices
               </span>
@@ -116,16 +116,9 @@ export function Footer() {
               </li>
               <li className="flex items-center space-x-2">
                 <Phone className="w-4 h-4 text-purple-400" />
-                <span className="text-gray-400 text-sm">+1 (555) 123-4567</span>
+                <span className="text-gray-400 text-sm">+92 339 0012836</span>
               </li>
-              <li className="flex items-start space-x-2">
-                <MapPin className="w-4 h-4 text-purple-400 mt-0.5" />
-                <span className="text-gray-400 text-sm">
-                  123 Empowerment Street
-                  <br />
-                  Community City, CC 12345
-                </span>
-              </li>
+              
             </ul>
           </div>
         </div>
