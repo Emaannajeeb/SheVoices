@@ -9,13 +9,19 @@ export function Footer() {
           {/* Brand */}
           <div className="space-y-4">
             <Link href="/" className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
-                <Heart className="w-4 h-4 text-white" />
+              <div className="w-8 h-8">
+                <img
+                  src="/logo.jpeg"
+                  alt="SheVoices Logo"
+                  className="w-8 h-8 object-contain rounded-full"
+                />
               </div>
-              <span className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+              
+              <span className="text-xl font-bold bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent">
                 SheVoices
               </span>
             </Link>
+
             <p className="text-gray-400 text-sm">
               Empowering women through community, stories, and shared experiences. Join us in creating a world where
               every woman's voice is heard and valued.
@@ -106,7 +112,7 @@ export function Footer() {
             <ul className="space-y-3">
               <li className="flex items-center space-x-2">
                 <Mail className="w-4 h-4 text-purple-400" />
-                <span className="text-gray-400 text-sm">hello@shevoices.org</span>
+                <span className="text-gray-400 text-sm">shevoices8@gmail.com</span>
               </li>
               <li className="flex items-center space-x-2">
                 <Phone className="w-4 h-4 text-purple-400" />

@@ -47,7 +47,7 @@ export default function ContactPage() {
         // Optional: Still create mailto link as backup
         const subject = formData.subject || `Message from ${formData.name} - SheVoices Contact`
         const body = `Name: ${formData.name}\nEmail: ${formData.email}\n\nMessage:\n${formData.message}`
-        const mailtoLink = `mailto:hello@shevoices.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+        const mailtoLink = `mailto:shevoices8@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
         
         // Open email client in background
         setTimeout(() => {
@@ -195,8 +195,8 @@ export default function ContactPage() {
                     </div>
                     <div>
                       <h4 className="font-semibold text-gray-800">Email Us</h4>
-                      <a href="mailto:hello@shevoices.com" className="text-purple-600 hover:text-purple-700">
-                        hello@shevoices.com
+                      <a href="mailto:shevoices8@gmail.com" className="text-purple-600 hover:text-purple-700">
+                        shevoices8@gmail.com
                       </a>
                     </div>
                   </div>
