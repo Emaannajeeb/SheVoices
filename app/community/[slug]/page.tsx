@@ -1,11 +1,12 @@
-"use client"
-
 import { notFound } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, User, Share2, Facebook, MessageCircle } from "lucide-react"
+import { Calendar, User, Share2 } from "lucide-react"
 import { prisma } from "@/lib/prisma"
+import ShareButtons from "./share-buttons"
+
+export const dynamic = "force-dynamic"
 
 async function getBlogPost(slug: string) {
   try {
@@ -103,49 +104,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
               <Share2 className="w-5 h-5 mr-2" />
               Share This Story
             </h3>
-            <div className="flex flex-wrap gap-3">
-              <a
-                href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Button className="bg-blue-600 hover:bg-blue-700 text-white rounded-full">
-                  <Facebook className="w-4 h-4 mr-2" />
-                  Facebook
-                </Button>
-              </a>
-
-              <a
-                href={`https://wa.me/?text=${encodeURIComponent(`${shareText} ${shareUrl}`)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Button className="bg-green-600 hover:bg-green-700 text-white rounded-full">
-                  <MessageCircle className="w-4 h-4 mr-2" />
-                  WhatsApp
-                </Button>
-              </a>
-
-              <Button
-                onClick={() => {
-                  if (navigator.share) {
-                    navigator.share({
-                      title: post.title,
-                      text: shareText,
-                      url: shareUrl,
-                    })
-                  } else {
-                    navigator.clipboard.writeText(shareUrl)
-                    alert("Link copied to clipboard!")
-                  }
-                }}
-                variant="outline"
-                className="border-purple-300 text-purple-600 hover:bg-purple-50 rounded-full"
-              >
-                <Share2 className="w-4 h-4 mr-2" />
-                Share
-              </Button>
-            </div>
+            <ShareButtons shareUrl={shareUrl} shareText={shareText} postTitle={post.title} />
           </CardContent>
         </Card>
 
