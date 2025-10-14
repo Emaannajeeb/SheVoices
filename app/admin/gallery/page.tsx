@@ -51,6 +51,7 @@ export default function AdminGalleryPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [deleteImage, setDeleteImage] = useState<GalleryImage | null>(null)
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false)
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -82,7 +83,7 @@ export default function AdminGalleryPage() {
 
   const handleDelete = async (image: GalleryImage) => {
     try {
-      const response = await fetch(`/api/upload?publicId=${image.publicId}`, {
+      const response = await fetch(`/api/gallery?publicId=${encodeURIComponent(image.publicId)}`, {
         method: "DELETE",
       })
 
@@ -92,6 +93,34 @@ export default function AdminGalleryPage() {
       }
     } catch (error) {
       console.error("Error deleting image:", error)
+    }
+  }
+
+  const handleDeleteAll = async () => {
+    try {
+      const publicIds = images.map((img) => img.publicId)
+      if (publicIds.length === 0) {
+        setDeleteAllOpen(false)
+        return
+      }
+
+      const response = await fetch("/api/gallery", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ publicIds }),
+      })
+
+      if (response.ok) {
+        setImages([])
+      } else {
+        console.error("Failed to delete all images")
+      }
+    } catch (error) {
+      console.error("Error deleting all images:", error)
+    } finally {
+      setDeleteAllOpen(false)
     }
   }
 
@@ -167,12 +196,23 @@ export default function AdminGalleryPage() {
             </h1>
             <p className="text-gray-600">Upload and manage your photo gallery from Cloudinary</p>
           </div>
-          <Link href="/admin/gallery/upload">
-            <Button className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl mt-4 md:mt-0">
-              <Plus className="w-4 h-4 mr-2" />
-              Upload Images
+          <div className="flex items-center gap-3 mt-4 md:mt-0">
+            <Button
+              variant="destructive"
+              className="rounded-xl"
+              onClick={() => setDeleteAllOpen(true)}
+              disabled={images.length === 0}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete All
             </Button>
-          </Link>
+            <Link href="/admin/gallery/upload">
+              <Button className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl">
+                <Plus className="w-4 h-4 mr-2" />
+                Upload Images
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {/* Stats Cards */}
@@ -386,6 +426,23 @@ export default function AdminGalleryPage() {
                 className="bg-red-600 hover:bg-red-700"
               >
                 Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+        {/* Delete All Confirmation Dialog */}
+        <AlertDialog open={deleteAllOpen} onOpenChange={setDeleteAllOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete All Images</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently remove all currently listed images from Cloudinary. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDeleteAll} className="bg-red-600 hover:bg-red-700">
+                Delete All
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
