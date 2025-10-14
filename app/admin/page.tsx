@@ -10,11 +10,11 @@ import { prisma } from "@/lib/prisma"
 async function getAdminStats() {
   try {
     const [blogCount, videoCount, imageCount, messageCount, unreadMessageCount] = await Promise.all([
-      prisma.blogPost.count(),
-      prisma.podcastVideo.count(),
-      prisma.galleryImage.count(),
+      prisma.blogPost.count({ where: { published: true } }),
+      prisma.podcastVideo.count({ where: { isActive: true } }),
+      prisma.galleryImage.count({ where: { isActive: true } }),
       prisma.contactMessage.count(),
-      prisma.contactMessage.count({ where: { status: 'unread' } }),
+      prisma.contactMessage.count({ where: { status: "UNREAD" } }),
     ])
     return { blogCount, videoCount, imageCount, messageCount, unreadMessageCount }
   } catch (error) {

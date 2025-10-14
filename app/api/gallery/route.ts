@@ -252,3 +252,99 @@ export async function POST(request: NextRequest) {
     }, { status: statusCode })
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    // Ensure Cloudinary is configured
+    const hasConfig = !!(process.env.CLOUDINARY_CLOUD_NAME &&
+                        process.env.CLOUDINARY_API_KEY &&
+                        process.env.CLOUDINARY_API_SECRET)
+    if (!hasConfig) {
+      console.error('❌ Missing Cloudinary configuration')
+      return NextResponse.json({ error: "Server configuration error" }, { status: 500 })
+    }
+
+    // Authentication check
+    const session = await getServerSession(authOptions)
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Accept identifiers from either query params or JSON body
+    const { searchParams } = new URL(request.url)
+    const qpPublicId = searchParams.get("publicId")
+    const qpPublicIds = searchParams.get("publicIds") // comma-separated
+
+    let body: any = null
+    try {
+      // Body might be empty on DELETE; swallow JSON parse errors
+      body = await request.json()
+    } catch {}
+
+    const bodyPublicId: string | undefined = body?.publicId
+    const bodyPublicIds: string[] | undefined = Array.isArray(body?.publicIds) ? body.publicIds : undefined
+    const bodyImageUrl: string | undefined = typeof body?.imageUrl === 'string' ? body.imageUrl : undefined
+
+    // Helper: extract Cloudinary publicId from a secure image URL
+    const extractPublicIdFromUrl = (imageUrl: string): string | null => {
+      try {
+        const url = new URL(imageUrl)
+        const afterUpload = url.pathname.split('/upload/')[1]
+        if (!afterUpload) return null
+        const segments = afterUpload.split('/').filter(Boolean)
+        const withoutVersion = segments[0] && /^v\d+$/.test(segments[0]) ? segments.slice(1) : segments
+        const joined = withoutVersion.join('/')
+        return joined.replace(/\.[^/.]+$/, '') || null
+      } catch {
+        return null
+      }
+    }
+
+    // Build list of publicIds to delete
+    let publicIds: string[] = []
+    if (qpPublicIds) {
+      publicIds = qpPublicIds.split(',').map(s => s.trim()).filter(Boolean)
+    }
+    if (qpPublicId) {
+      publicIds.push(qpPublicId)
+    }
+    if (bodyPublicIds) {
+      publicIds.push(...bodyPublicIds)
+    }
+    if (bodyPublicId) {
+      publicIds.push(bodyPublicId)
+    }
+    if (bodyImageUrl) {
+      const extracted = extractPublicIdFromUrl(bodyImageUrl)
+      if (extracted) publicIds.push(extracted)
+    }
+
+    // Normalize and de-duplicate
+    publicIds = Array.from(new Set(publicIds.filter(Boolean)))
+
+    if (publicIds.length === 0) {
+      return NextResponse.json({ error: "No publicId(s) provided" }, { status: 400 })
+    }
+
+    // Prefer bulk deletion via Admin API
+    const deleteResult = await cloudinary.api.delete_resources(publicIds, {
+      resource_type: "image",
+      type: "upload",
+      invalidate: true,
+    } as any)
+
+    return NextResponse.json({
+      message: "Gallery photo(s) deleted successfully",
+      publicIds,
+      result: deleteResult,
+    })
+  } catch (error: any) {
+    console.error('💥 Gallery DELETE error:', error)
+    const status = error?.http_code || 500
+    return NextResponse.json({
+      error: "Failed to delete gallery photo(s)",
+      details: error?.message || 'Unknown error',
+      cloudinary_code: error?.http_code,
+    }, { status })
+  }
+}

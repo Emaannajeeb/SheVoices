@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Calendar, User, ArrowRight } from "lucide-react"
 import { prisma } from "@/lib/prisma"
+export const dynamic = "force-dynamic"
 
 async function getBlogPosts() {
   try {
