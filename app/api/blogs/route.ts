@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { title, content, excerpt, published, featuredImage, tags } = body
+    const { title, content, excerpt, published, featuredImage, images = [], tags } = body
 
     // Generate slug from title
     const slug = title
@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
         authorId: session.user?.id!,
         published: published || false,
         featuredImage,
+        images: Array.isArray(images) ? images : [],
         tags: tags || [],
       },
     })

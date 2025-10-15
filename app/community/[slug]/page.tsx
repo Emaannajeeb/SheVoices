@@ -97,6 +97,21 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
           </CardContent>
         </Card>
 
+        {/* Additional Images */}
+        {Array.isArray((post as any).images) && (post as any).images.length > 0 && (
+          <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg rounded-2xl mb-8">
+            <CardContent className="p-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {(post as any).images.map((url: string) => (
+                  <div key={url} className="rounded-xl overflow-hidden shadow">
+                    <img src={url} alt={post.title} className="w-full h-48 object-cover" />
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Share Buttons */}
         <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg rounded-2xl mb-8">
           <CardContent className="p-6">

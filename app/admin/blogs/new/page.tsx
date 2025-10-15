@@ -27,6 +27,7 @@ export default function NewBlogPage() {
     excerpt: "",
     published: false,
     featuredImage: "",
+    images: [] as string[],
     tags: [] as string[],
   })
 
@@ -81,6 +82,33 @@ export default function NewBlogPage() {
       }
     } catch (error) {
       console.error("Error uploading image:", error)
+    } finally {
+      setImageUploading(false)
+    }
+  }
+
+  const handleExtraImagesUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+
+    setImageUploading(true)
+    try {
+      const uploadedUrls: string[] = []
+      for (const file of files) {
+        const fd = new FormData()
+        fd.append("file", file)
+        fd.append("category", "blog-extra")
+        const res = await fetch("/api/upload", { method: "POST", body: fd })
+        if (res.ok) {
+          const data = await res.json()
+          uploadedUrls.push(data.url)
+        }
+      }
+      if (uploadedUrls.length > 0) {
+        setFormData((prev) => ({ ...prev, images: [...prev.images, ...uploadedUrls] }))
+      }
+    } catch (error) {
+      console.error("Error uploading extra images:", error)
     } finally {
       setImageUploading(false)
     }
@@ -265,6 +293,57 @@ export default function NewBlogPage() {
                       </Label>
                     </div>
                   )}
+                </CardContent>
+              </Card>
+
+              {/* Additional Images */}
+              <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg rounded-2xl">
+                <CardHeader>
+                  <CardTitle>Additional Images</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {formData.images.length > 0 && (
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        {formData.images.map((url) => (
+                          <div key={url} className="relative group">
+                            <img src={url} alt="Extra" className="w-full h-24 object-cover rounded-xl" />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  images: prev.images.filter((u) => u !== url),
+                                }))
+                              }
+                              className="absolute top-2 right-2 bg-white/80 hover:bg-white text-red-600 rounded-full p-1 opacity-0 group-hover:opacity-100 transition"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleExtraImagesUpload}
+                        className="hidden"
+                        id="extra-images"
+                      />
+                      <Label
+                        htmlFor="extra-images"
+                        className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-purple-300 rounded-xl cursor-pointer hover:bg-purple-50 transition-colors"
+                      >
+                        <Upload className="w-8 h-8 text-purple-400 mb-2" />
+                        <span className="text-sm text-purple-600">
+                          {imageUploading ? "Uploading..." : "Upload Additional Images"}
+                        </span>
+                      </Label>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
 

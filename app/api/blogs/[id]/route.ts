@@ -44,7 +44,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     const { id } = await params
     const body = await request.json()
-    const { title, content, excerpt, published, featuredImage, tags } = body
+    const { title, content, excerpt, published, featuredImage, images = [], tags } = body
 
     // Check if post exists
     const existingPost = await prisma.blogPost.findUnique({ where: { id } })
@@ -77,6 +77,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         excerpt,
         published,
         featuredImage,
+        images: Array.isArray(images) ? images : undefined,
         tags,
       },
       include: {
