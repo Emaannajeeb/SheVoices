@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Progress } from "@/components/ui/progress"
-import { Upload, Video, ArrowLeft, CheckCircle, AlertCircle } from "lucide-react"
+import { Video, ArrowLeft, CheckCircle, AlertCircle, Upload } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 
@@ -26,6 +26,7 @@ export default function PodcastUploadPage() {
     title: "",
     description: "",
     tags: "",
+    youtubeUrl: "",
   })
 
   if (status === "unauthenticated") {
@@ -40,26 +41,62 @@ export default function PodcastUploadPage() {
     }))
   }
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+  // Extract YouTube video ID from URL
+  const extractYouTubeId = (url: string): string | null => {
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+      /youtube\.com\/watch\?.*v=([^&\n?#]+)/,
+    ]
+    
+    for (const pattern of patterns) {
+      const match = url.match(pattern)
+      if (match && match[1]) {
+        return match[1]
+      }
+    }
+    return null
+  }
 
-    // Validate file type
-    if (!file.type.startsWith("video/")) {
+  // Get YouTube embed URL
+  const getYouTubeEmbedUrl = (url: string): string | null => {
+    const videoId = extractYouTubeId(url)
+    if (!videoId) return null
+    return `https://www.youtube.com/embed/${videoId}`
+  }
+
+  // Get YouTube thumbnail URL
+  const getYouTubeThumbnail = (url: string): string | null => {
+    const videoId = extractYouTubeId(url)
+    if (!videoId) return null
+    return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!formData.title) {
       toast({
-        title: "Invalid File Type",
-        description: "Please select a video file",
+        title: "Title Required",
+        description: "Please enter a title for the podcast video",
         variant: "destructive",
       })
       return
     }
 
-    // Validate file size (100MB limit)
-    const maxSize = 100 * 1024 * 1024 // 100MB
-    if (file.size > maxSize) {
+    if (!formData.youtubeUrl) {
       toast({
-        title: "File Too Large",
-        description: "Please select a video file smaller than 100MB",
+        title: "YouTube URL Required",
+        description: "Please enter a YouTube video URL",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const videoId = extractYouTubeId(formData.youtubeUrl)
+    if (!videoId) {
+      toast({
+        title: "Invalid YouTube URL",
+        description: "Please enter a valid YouTube video URL",
         variant: "destructive",
       })
       return
@@ -69,14 +106,6 @@ export default function PodcastUploadPage() {
     setUploadProgress(0)
 
     try {
-      const uploadFormData = new FormData()
-      uploadFormData.append("file", file)
-      uploadFormData.append("type", "video")
-      uploadFormData.append("title", formData.title || file.name)
-      uploadFormData.append("description", formData.description)
-      uploadFormData.append("category", "podcast")
-      uploadFormData.append("tags", formData.tags)
-
       // Simulate progress
       const progressInterval = setInterval(() => {
         setUploadProgress((prev) => {
@@ -86,11 +115,26 @@ export default function PodcastUploadPage() {
           }
           return prev + Math.random() * 10
         })
-      }, 500)
+      }, 200)
 
-      const response = await fetch("/api/upload", {
+      const tagsArray = formData.tags
+        ? formData.tags.split(",").map((tag) => tag.trim()).filter((tag) => tag)
+        : []
+
+      const response = await fetch("/api/podcast", {
         method: "POST",
-        body: uploadFormData,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: formData.title,
+          description: formData.description,
+          videoUrl: getYouTubeEmbedUrl(formData.youtubeUrl),
+          thumbnailUrl: getYouTubeThumbnail(formData.youtubeUrl),
+          tags: tagsArray,
+          isActive: true,
+          category: "podcast",
+        }),
       })
 
       clearInterval(progressInterval)
@@ -101,8 +145,8 @@ export default function PodcastUploadPage() {
         setUploadedVideo(result)
 
         toast({
-          title: "Upload Successful",
-          description: "Your podcast video has been uploaded to Cloudinary",
+          title: "Video Added Successfully",
+          description: "Your YouTube video has been added to the podcast",
         })
 
         // Reset form
@@ -110,19 +154,17 @@ export default function PodcastUploadPage() {
           title: "",
           description: "",
           tags: "",
+          youtubeUrl: "",
         })
-
-        // Reset file input
-        e.target.value = ""
       } else {
         const error = await response.json()
-        throw new Error(error.message || "Upload failed")
+        throw new Error(error.error || "Failed to add video")
       }
     } catch (error) {
-      console.error("Upload error:", error)
+      console.error("Error adding video:", error)
       toast({
-        title: "Upload Failed",
-        description: (error as any).message || "Failed to upload video",
+        title: "Failed to Add Video",
+        description: (error as any).message || "Failed to add YouTube video",
         variant: "destructive",
       })
     } finally {
@@ -156,9 +198,9 @@ export default function PodcastUploadPage() {
           </Link>
           <div>
             <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 via-pink-500 to-orange-400 bg-clip-text text-transparent">
-              Upload Podcast Video
+              Add Podcast Video
             </h1>
-            <p className="text-gray-600">Upload your podcast video to Cloudinary</p>
+            <p className="text-gray-600">Add a YouTube video to your podcast</p>
           </div>
         </div>
 
@@ -171,86 +213,86 @@ export default function PodcastUploadPage() {
                 Video Details
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="title">Title *</Label>
-                <Input
-                  id="title"
-                  name="title"
-                  value={formData.title}
-                  onChange={handleInputChange}
-                  placeholder="Enter video title"
-                  className="rounded-xl"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  name="description"
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  placeholder="Enter video description"
-                  className="rounded-xl min-h-[100px]"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="tags">Tags</Label>
-                <Input
-                  id="tags"
-                  name="tags"
-                  value={formData.tags}
-                  onChange={handleInputChange}
-                  placeholder="Enter tags separated by commas"
-                  className="rounded-xl"
-                />
-                <p className="text-sm text-gray-500">Separate multiple tags with commas</p>
-              </div>
-
-              {/* File Upload */}
-              <div className="space-y-2">
-                <Label htmlFor="video">Video File *</Label>
-                <div className="border-2 border-dashed border-purple-200 rounded-xl p-8 text-center hover:border-purple-300 transition-colors">
-                  <input
-                    id="video"
-                    type="file"
-                    accept="video/*"
-                    onChange={handleFileUpload}
-                    disabled={uploading}
-                    className="hidden"
-                  />
-                  <label
-                    htmlFor="video"
-                    className={`cursor-pointer flex flex-col items-center gap-4 ${
-                      uploading ? "pointer-events-none opacity-50" : ""
-                    }`}
-                  >
-                    <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center">
-                      <Upload className="w-8 h-8 text-purple-600" />
-                    </div>
-                    <div>
-                      <p className="text-lg font-medium text-gray-700">
-                        {uploading ? "Uploading..." : "Click to upload video"}
-                      </p>
-                      <p className="text-sm text-gray-500">MP4, MOV, AVI up to 100MB</p>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              {/* Upload Progress */}
-              {uploading && (
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Uploading to Cloudinary...</span>
-                    <span>{Math.round(uploadProgress)}%</span>
-                  </div>
-                  <Progress value={uploadProgress} className="h-2" />
+                  <Label htmlFor="title">Title *</Label>
+                  <Input
+                    id="title"
+                    name="title"
+                    value={formData.title}
+                    onChange={handleInputChange}
+                    placeholder="Enter video title"
+                    className="rounded-xl"
+                    required
+                    disabled={uploading}
+                  />
                 </div>
-              )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="youtubeUrl">YouTube URL *</Label>
+                  <Input
+                    id="youtubeUrl"
+                    name="youtubeUrl"
+                    type="url"
+                    value={formData.youtubeUrl}
+                    onChange={handleInputChange}
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    className="rounded-xl"
+                    required
+                    disabled={uploading}
+                  />
+                  <p className="text-sm text-gray-500">
+                    Enter a YouTube video URL (e.g., https://www.youtube.com/watch?v=...)
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    name="description"
+                    value={formData.description}
+                    onChange={handleInputChange}
+                    placeholder="Enter video description"
+                    className="rounded-xl min-h-[100px]"
+                    disabled={uploading}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="tags">Tags</Label>
+                  <Input
+                    id="tags"
+                    name="tags"
+                    value={formData.tags}
+                    onChange={handleInputChange}
+                    placeholder="Enter tags separated by commas"
+                    className="rounded-xl"
+                    disabled={uploading}
+                  />
+                  <p className="text-sm text-gray-500">Separate multiple tags with commas</p>
+                </div>
+
+                {/* Upload Progress */}
+                {uploading && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span>Adding video...</span>
+                      <span>{Math.round(uploadProgress)}%</span>
+                    </div>
+                    <Progress value={uploadProgress} className="h-2" />
+                  </div>
+                )}
+
+                <Button
+                  type="submit"
+                  disabled={uploading}
+                  className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl"
+                >
+                  {uploading ? "Adding Video..." : "Add YouTube Video"}
+                </Button>
+              </form>
             </CardContent>
           </Card>
 
@@ -278,8 +320,8 @@ export default function PodcastUploadPage() {
                   <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
                     <Upload className="w-8 h-8 text-purple-600 animate-pulse" />
                   </div>
-                  <p className="text-gray-700 font-medium">Uploading to Cloudinary...</p>
-                  <p className="text-sm text-gray-500 mt-2">Please wait while we process your video</p>
+                  <p className="text-gray-700 font-medium">Adding video...</p>
+                  <p className="text-sm text-gray-500 mt-2">Please wait while we add your YouTube video</p>
                 </div>
               )}
 
@@ -288,30 +330,21 @@ export default function PodcastUploadPage() {
                   <div className="flex items-center gap-3 p-4 bg-green-50 rounded-xl">
                     <CheckCircle className="w-6 h-6 text-green-600" />
                     <div>
-                      <p className="font-medium text-green-800">Upload Successful!</p>
-                      <p className="text-sm text-green-600">Video uploaded to Cloudinary</p>
+                      <p className="font-medium text-green-800">Video Added Successfully!</p>
+                      <p className="text-sm text-green-600">YouTube video has been added to the podcast</p>
                     </div>
                   </div>
 
                   <div className="space-y-3">
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Public ID:</span>
-                      <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">{uploadedVideo.publicId}</span>
+                      <span className="text-gray-600">Title:</span>
+                      <span className="font-medium">{uploadedVideo.title}</span>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Format:</span>
-                      <span className="uppercase">{uploadedVideo.format}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Size:</span>
-                      <span>{(uploadedVideo.bytes / (1024 * 1024)).toFixed(2)} MB</span>
-                    </div>
-                    {uploadedVideo.duration && (
+                    {uploadedVideo.videoUrl && (
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Duration:</span>
-                        <span>
-                          {Math.floor(uploadedVideo.duration / 60)}:
-                          {(uploadedVideo.duration % 60).toString().padStart(2, "0")}
+                        <span className="text-gray-600">Video URL:</span>
+                        <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded truncate max-w-[200px]">
+                          {uploadedVideo.videoUrl}
                         </span>
                       </div>
                     )}
@@ -349,21 +382,20 @@ export default function PodcastUploadPage() {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <h4 className="font-medium text-gray-800 mb-2">Supported Formats</h4>
+                <h4 className="font-medium text-gray-800 mb-2">Supported URLs</h4>
                 <ul className="text-sm text-gray-600 space-y-1">
-                  <li>• MP4 (recommended)</li>
-                  <li>• MOV</li>
-                  <li>• AVI</li>
-                  <li>• WebM</li>
+                  <li>• youtube.com/watch?v=...</li>
+                  <li>• youtu.be/...</li>
+                  <li>• youtube.com/embed/...</li>
                 </ul>
               </div>
               <div>
                 <h4 className="font-medium text-gray-800 mb-2">Requirements</h4>
                 <ul className="text-sm text-gray-600 space-y-1">
-                  <li>• Maximum file size: 100MB</li>
-                  <li>• Recommended resolution: 1080p</li>
+                  <li>• Valid YouTube video URL</li>
                   <li>• Title is required</li>
-                  <li>• Videos are automatically optimized</li>
+                  <li>• Video must be publicly accessible</li>
+                  <li>• Videos will be embedded on the podcast page</li>
                 </ul>
               </div>
             </div>

@@ -26,10 +26,18 @@ export default function PodcastPage() {
   const [videos, setVideos] = useState<PodcastVideo[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedVideo, setSelectedVideo] = useState<PodcastVideo | null>(null)
 
   useEffect(() => {
     fetchPodcastData()
   }, [])
+
+  // Set the first video as selected when videos are loaded
+  useEffect(() => {
+    if (videos.length > 0 && !selectedVideo) {
+      setSelectedVideo(videos[0])
+    }
+  }, [videos, selectedVideo])
 
   const fetchPodcastData = async () => {
     try {
@@ -84,7 +92,13 @@ export default function PodcastPage() {
     return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
   }
 
-  const featuredVideo = videos.length > 0 ? videos[0] : null
+  // Use selectedVideo or default to first video
+  const featuredVideo = selectedVideo || (videos.length > 0 ? videos[0] : null)
+  
+  // Get other videos (excluding the currently selected one)
+  const otherVideos = featuredVideo 
+    ? videos.filter(v => v.id !== featuredVideo.id)
+    : videos.slice(1)
 
   // Loading State
   if (loading) {
@@ -166,17 +180,27 @@ export default function PodcastPage() {
             </CardHeader>
             <CardContent className="px-8 pb-8">
               <div className="aspect-video rounded-2xl overflow-hidden shadow-lg mb-6 bg-black">
-                <video
-                  controls
-                  poster={featuredVideo.thumbnailUrl}
-                  className="w-full h-full object-contain"
-                  preload="metadata"
-                  controlsList="nodownload"
-                >
-                  <source src={featuredVideo.videoUrl} type={`video/${featuredVideo.format}`} />
-                  <source src={featuredVideo.videoUrl} type="video/mp4" />
-                  Your browser does not support the video tag.
-                </video>
+                {featuredVideo.videoUrl.includes("youtube.com/embed/") || featuredVideo.videoUrl.includes("youtu.be/") ? (
+                  <iframe
+                    src={featuredVideo.videoUrl}
+                    title={featuredVideo.title}
+                    className="w-full h-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                ) : (
+                  <video
+                    controls
+                    poster={featuredVideo.thumbnailUrl}
+                    className="w-full h-full object-contain"
+                    preload="metadata"
+                    controlsList="nodownload"
+                  >
+                    <source src={featuredVideo.videoUrl} type={`video/${featuredVideo.format}`} />
+                    <source src={featuredVideo.videoUrl} type="video/mp4" />
+                    Your browser does not support the video tag.
+                  </video>
+                )}
               </div>
 
               <div className="flex items-center justify-center gap-6 text-sm text-gray-500 flex-wrap">
@@ -239,7 +263,7 @@ export default function PodcastPage() {
         )}
 
         {/* Additional Videos */}
-        {videos.length > 1 && (
+        {otherVideos.length > 0 && (
           <div className="mb-16">
             <div className="text-center mb-12">
               <h2 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent mb-4">
@@ -251,13 +275,13 @@ export default function PodcastPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {videos.slice(1).map((episode) => (
+              {otherVideos.map((episode) => (
                 <Card
                   key={episode.id}
                   className="bg-white/80 backdrop-blur-sm border-0 shadow-lg hover:shadow-xl transition-all duration-300 rounded-2xl overflow-hidden group cursor-pointer"
                   onClick={() => {
-                    // Optional: Add click handler for episode selection
-                    console.log('Selected episode:', episode.title)
+                    setSelectedVideo(episode)
+                    window.scrollTo({ top: 0, behavior: 'smooth' })
                   }}
                 >
                   <div className="aspect-video overflow-hidden relative bg-black">
